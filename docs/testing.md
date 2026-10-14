@@ -24,6 +24,12 @@ Require the `Test run with ... tests ... passed` summary before treating the sui
 
 ## 2. Unit tests
 
+### macOS account popover sizing (v0.1.18)
+
+`MenuBarPopoverTests` measures the production SwiftUI view with 0, 1, 2, 3, 4, and 20 saved accounts, with five-hour usage both hidden and shown. The initial zero-height proposal and the sizes left by account management and settings must yield the same home height. One through three accounts increase the height; four and twenty retain the three-account viewport.
+
+The pre-fix zero-height probe returned only 84 points, leaving the forecast and footer visible while collapsing the accounts. Local interaction with the production view in an isolated SwiftUI window verified that three rows remain visible, scrolling reaches accounts 4–6, and returning from both subpages restores the original home height. This fixture uses synthetic accounts and does not switch real Codex credentials.
+
 ### Active credential refresh and Desktop updates (v0.1.16)
 
 `CredentialSyncTests` covers refreshed live credentials, refusal to copy a different workspace with the same email, legacy IDs populated from each saved profile, registration after an external login changes, and a usage response deliberately returned after cancellation during a switch. The controller drains the old refresh before mutating credentials and starts a fresh read afterward. The quota client cancellation test also verifies that a silent pending request stops before its request timeout.

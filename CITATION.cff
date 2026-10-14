@@ -10,8 +10,8 @@ authors:
 repository-code: "https://github.com/liuzhao1225/codex-account-switcher"
 url: "https://liuzhao1225.github.io/codex-account-switcher/"
 license: MIT
-version: 0.1.17
-date-released: 2026-10-08
+version: 0.1.18
+date-released: 2026-10-15
 keywords:
   - Codex account switcher
   - Codex profile switcher
