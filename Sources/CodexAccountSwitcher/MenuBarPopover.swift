@@ -83,12 +83,20 @@ struct MenuBarPopover: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 28)
             } else {
-                ViewThatFits(in: .vertical) {
-                    accountList
-                    ScrollView { accountList }
+                Group {
+                    if model.accounts.count <= 3 {
+                        accountList(model.accounts)
+                    } else {
+                        // The first three rows determine the viewport's intrinsic height.
+                        accountList(Array(model.accounts.prefix(3)))
+                            .hidden()
+                            .overlay {
+                                ScrollView { accountList(model.accounts) }
+                            }
+                    }
                 }
-                // Leave room for the footer, update notice, and error messages.
-                .frame(maxHeight: NSScreen.main.map { $0.visibleFrame.height * 0.75 })
+                // Ignore the initial zero-height probe and the previous page's height.
+                .fixedSize(horizontal: false, vertical: true)
             }
 
             Divider()
@@ -143,9 +151,9 @@ struct MenuBarPopover: View {
         }
     }
 
-    private var accountList: some View {
+    private func accountList(_ accounts: [AccountProfile]) -> some View {
         VStack(spacing: 8) {
-            ForEach(model.accounts) { account in
+            ForEach(accounts) { account in
                 Button {
                     if account.id == model.activeAccountID {
                         NSApp.keyWindow?.close()
