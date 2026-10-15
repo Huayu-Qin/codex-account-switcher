@@ -55,10 +55,12 @@ Recommended stack:
 - Swift 6;
 - SwiftUI for UI;
 - `MenuBarExtra` for the status item and popover;
-- AppKit for process discovery and application lifecycle;
+- AppKit for process discovery, application lifecycle and the independently accessible account panel;
 - Service Management for the main app's Login Item registration and authorization state;
 - Foundation `FileManager`, `Process`, and JSON coding;
 - Codex app-server JSON-RPC over stdio for identity and Usage reads.
+
+`SwitcherAppDelegate` owns the shared UI models and starts refresh/update work in `applicationDidFinishLaunching`, even when the menu-bar label is offscreen. Manual launch and `applicationShouldHandleReopen` present `MenuBarPopover` in an `NSPanel` hosted by SwiftUI, with content-derived size constraints. The login-item Apple event suppresses the initial panel. Service Management remains the source of truth for auto-start registration.
 
 No third-party runtime dependency is required beyond the installed Codex executable.
 

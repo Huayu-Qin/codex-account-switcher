@@ -168,6 +168,13 @@ Verify:
 
 With the packaged application:
 
+- quit and launch from Finder; confirm the account panel appears without clicking the menu bar;
+- close the panel with Escape or the close button, then double-click the running app in Finder; confirm one account panel reopens;
+- repeat with Settings or Manage Accounts open; confirm explicit reopen returns to the account list;
+- navigate to Settings and Manage Accounts and back; confirm content-derived height and the existing three-account scrolling limit;
+- test with a crowded/notched menu bar; confirm the independent panel stays accessible, and the percentage toggle reduces icon width;
+- `StartupTests` exercises the actual open-application Apple-event marker for quiet login launch; a real logout/login remains a separate manual check.
+
 1. open Settings and enable Launch at Login;
 2. confirm `sfltool dumpbtm` contains `com.liuzhao.codex-account-switcher`;
 3. if macOS reports approval required, use the displayed System Settings link, approve the item, and confirm the Toggle becomes enabled after reopening Settings;
