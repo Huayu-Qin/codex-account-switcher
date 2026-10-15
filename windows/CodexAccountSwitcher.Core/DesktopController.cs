@@ -99,7 +99,9 @@ public sealed class DesktopController(Func<CancellationToken, Task<DesktopInstal
         return result == ErrorSuccess ? value.ToString() : null;
     }
 
-    public async Task CloseAsync(CancellationToken cancellationToken)
+    public Task CloseAsync(CancellationToken cancellationToken) => CloseAsync(cancellationToken, TimeSpan.FromSeconds(30));
+
+    internal async Task CloseAsync(CancellationToken cancellationToken, TimeSpan exitTimeout)
     {
         // Store package paths are versioned, so resolve the executable for every handoff.
         var installation = await discover(cancellationToken);
@@ -107,17 +109,7 @@ public sealed class DesktopController(Func<CancellationToken, Task<DesktopInstal
         try
         {
             if (initial.Count == 0) return;
-            var requested = false;
-            foreach (var process in initial)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                if (!process.HasExited && process.MainWindowHandle != IntPtr.Zero)
-                {
-                    if (!process.CloseMainWindow()) throw new IOException("Codex Desktop rejected the normal close request.");
-                    requested = true;
-                }
-            }
-            if (!requested) throw new IOException("Codex Desktop is running without a closable window. Quit it manually before switching.");
+            await DesktopQuitRequest.SendAsync(initial, cancellationToken);
             var stopwatch = Stopwatch.StartNew();
             while (true)
             {
@@ -126,8 +118,8 @@ public sealed class DesktopController(Func<CancellationToken, Task<DesktopInstal
                 var count = remaining.Count;
                 foreach (var process in remaining) process.Dispose();
                 if (count == 0) return;
-                if (stopwatch.Elapsed > TimeSpan.FromSeconds(30))
-                    throw new TimeoutException("Codex Desktop did not exit within 30 seconds. Finish its tasks and quit it manually; the account was not changed.");
+                if (stopwatch.Elapsed > exitTimeout)
+                    throw new TimeoutException($"Codex Desktop did not exit within {exitTimeout.TotalSeconds:g} seconds. Finish its tasks and confirm Quit in Codex, or quit it from the tray; the account was not changed.");
                 await Task.Delay(200, cancellationToken);
             }
         }

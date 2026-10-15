@@ -24,6 +24,14 @@ Require the `Test run with ... tests ... passed` summary before treating the sui
 
 ## 2. Unit tests
 
+### Windows tray-aware Quit (issue #29)
+
+`DesktopCloseChecks` uses a real WinForms child process whose window-close action hides to the tray, while `Ctrl+Q` performs application shutdown. It covers a visible window, an already hidden window alongside a titled helper window, asynchronous cleanup, refusal to quit, timeout, cancellation before the request and while awaiting exit, a same-name process at another path, and versioned Store path rediscovery. The production path must request Quit once and wait for all matching processes to exit; it never force-terminates Desktop. `SwitchServiceTests.quitFailureLeavesBothAccountsUntouched` separately covers credential preservation on a close-stage error.
+
+These keyboard integration checks require an unlocked interactive desktop. Locked sessions or rejected foreground activation must fail before sending the shortcut. Fixtures use synthetic installation directories and never switch actual credentials. The real Store app's quit confirmation and a complete account handoff still require manual acceptance testing.
+
+The implementation choice was checked against the installed Codex 26.1007.2314.0 package: its main-window close handler hides the final window when tray mode is available; its Windows File menu explicitly binds `Ctrl+Q` to the Electron `quit` role. This is static evidence from a newer build than the issue's 26.1002.6548.0, not a live handoff test of that reported version.
+
 ### macOS account popover sizing (v0.1.18)
 
 `MenuBarPopoverTests` measures the production SwiftUI view with 0, 1, 2, 3, 4, and 20 saved accounts, with five-hour usage both hidden and shown. The initial zero-height proposal and the sizes left by account management and settings must yield the same home height. One through three accounts increase the height; four and twenty retain the three-account viewport.
