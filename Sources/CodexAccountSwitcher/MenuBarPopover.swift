@@ -63,11 +63,14 @@ struct MenuBarPopover: View {
     private var accountPage: some View {
         VStack(spacing: 0) {
             if !model.activeIdentityConfirmed {
-                VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 8) {
                     Text(model.text("active_unconfirmed"))
+                        .lineLimit(1)
+                    Spacer(minLength: 8)
                     Button(model.text("manage")) {
                         page = .manageAccounts
                     }
+                    .fixedSize()
                     .disabled(model.isMutating || updater.isInstalling)
                 }
                     .font(.caption)

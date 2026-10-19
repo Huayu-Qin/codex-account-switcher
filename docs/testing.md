@@ -32,7 +32,9 @@ The pre-fix zero-height probe returned only 84 points, leaving the forecast and 
 
 ### Active credential refresh and Desktop updates (v0.1.16)
 
-`CredentialSyncTests` covers refreshed live credentials, refusal to copy a different workspace with the same email, legacy IDs populated from each saved profile, registration after an external login changes, and a usage response deliberately returned after cancellation during a switch. The controller drains the old refresh before mutating credentials and starts a fresh read afterward. The quota client cancellation test also verifies that a silent pending request stops before its request timeout.
+The current local `auth.json` determines the active account at startup, during usage refresh, and before switching or removing an account. An external login selects its matching saved profile or imports a new profile; signing out clears the active selection. Credentials are copied only to the profile matching their account ID, including when multiple workspaces share an email address. Unreadable or malformed credentials stop the operation and display an error.
+
+`CredentialSyncTests` covers external login changes, login after an empty startup, sign-out and re-login, refreshed credentials, preservation of other workspaces, legacy IDs populated from each saved profile, registration after an external login changes, and a usage response deliberately returned after cancellation during a switch. The controller drains the old refresh before mutating credentials and starts a fresh read afterward. The quota client cancellation test also verifies that a silent pending request stops before its request timeout.
 
 Windows CI runs an isolated WinForms Desktop fixture through two versioned installation directories using the same long-lived `DesktopController`. It verifies rediscovery for every close/open operation. WPF checks reopen a pending login and require the enabled cancellation button. These checks do not verify a complete handoff of the real Store-packaged Codex app.
 
