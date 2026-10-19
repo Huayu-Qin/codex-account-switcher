@@ -70,19 +70,18 @@ struct AccountControllerTests {
         #expect(fixture.model.visibleError == nil)
     }
 
-    @Test func startupRejectsCredentialsThatDoNotMatchTheReadIdentity() async throws {
+    @Test func startupUsesTheLocalCredentialAsTheIdentitySource() async throws {
         let fixture = try ControllerFixture()
         defer { fixture.clean() }
         let credential = Data(#"{"tokens":{"account_id":"different-workspace"}}"#.utf8)
         try credential.write(to: fixture.active.appendingPathComponent("auth.json"))
         await fixture.model.start()
-        #expect(fixture.model.accounts.isEmpty)
-        #expect(fixture.model.activeAccountID == nil)
-        #expect(fixture.model.visibleError != nil)
-        #expect(try await fixture.store.loadRegistry().accounts.isEmpty)
+        #expect(fixture.model.accounts.count == 1)
+        #expect(fixture.model.accounts.first?.accountID == "different-workspace")
+        #expect(fixture.model.activeAccountID == fixture.model.accounts.first?.id)
+        #expect(fixture.model.activeIdentityConfirmed)
+        #expect(fixture.model.visibleError == nil)
         #expect(try Data(contentsOf: fixture.active.appendingPathComponent("auth.json")) == credential)
-        let base = await fixture.store.baseURL
-        #expect(try FileManager.default.contentsOfDirectory(atPath: base.appendingPathComponent("accounts").path).isEmpty)
     }
 
     @Test func registerUsesExistingIdentityAndPreservesProfile() async throws {
@@ -180,7 +179,11 @@ private struct ControllerFixture {
             switchService: SwitchService(desktop: FixtureDesktop(), store: store, codex: client))
     }
     func writeActiveCredential() throws {
-        try Data(#"{"tokens":{"account_id":"demo-account","access_token":"fixture-secret-token"}}"#.utf8)
+        let claims = Data(#"{"email":"demo@example.test"}"#.utf8).base64EncodedString()
+        try JSONSerialization.data(withJSONObject: ["tokens": [
+            "account_id": "demo-account", "access_token": "fixture-secret-token",
+            "id_token": "header.\(claims).signature",
+        ]])
             .write(to: active.appendingPathComponent("auth.json"))
     }
     func clean() { try? FileManager.default.removeItem(at: root) }

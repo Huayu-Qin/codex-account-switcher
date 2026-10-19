@@ -61,21 +61,14 @@ open class AccountController {
         defer { isMutating = false }
         do {
             settings = try await store.loadSettings()
-            var registry = try await store.loadRegistry()
-            if registry.accounts.isEmpty, await store.activeCredentialExists() {
-                let activeHome = await store.activeCodexHome()
-                let identity = try await codex.readIdentity(profileHome: activeHome)
-                try await store.registerActiveIdentity(identity)
-                registry = try await store.loadRegistry()
-            }
-            apply(registry)
+            apply(try await store.loadRegistry())
+            try await syncActiveIdentity()
             await refreshSubscriptionSnapshots()
             do {
                 apply(try await store.loadUsageCache())
             } catch {
                 showError(error)
             }
-            await confirmActiveIdentity()
         } catch {
             showError(error)
         }
@@ -85,10 +78,9 @@ open class AccountController {
         if isBackgroundUsageRefreshEnabled {
             scheduleNextWeeklyUsageRefresh()
         }
-        guard !isMutating, !accounts.isEmpty, usageRefreshTask == nil else { return }
+        guard !isMutating, usageRefreshTask == nil else { return }
         usageRefreshTask = Task { [weak self] in
             guard let self else { return }
-            await self.refreshSubscriptionSnapshots()
             await self.performWeeklyUsageRefresh()
             self.usageRefreshTask = nil
         }
@@ -140,19 +132,14 @@ open class AccountController {
 
     private func performWeeklyUsageRefresh() async {
         guard !Task.isCancelled else { return }
-        if let id = activeAccountID {
-            do {
-                let matches = try await store.syncActiveCredentialIfMatching(id: id)
-                guard !Task.isCancelled else { return }
-                activeIdentityConfirmed = matches
-            } catch {
-                guard !Task.isCancelled else { return }
-                activeIdentityConfirmed = false
-                showError(error)
-                return
-            }
+        do {
+            try await syncActiveIdentity()
+        } catch {
+            showError(error)
+            return
         }
         guard !Task.isCancelled else { return }
+        await refreshSubscriptionSnapshots()
         await withTaskGroup(of: UsageRefreshResult.self) { group in
             for account in accounts {
                 group.addTask { [store, codex] in
@@ -189,11 +176,13 @@ open class AccountController {
     }
 
     public func switchAccount(to id: UUID) async {
-        guard id != activeAccountID, !isMutating else { return }
+        guard !isMutating else { return }
         isMutating = true
         await cancelUsageRefresh()
         defer { isMutating = false; refreshWeeklyUsage() }
         do {
+            try await syncActiveIdentity()
+            guard id != activeAccountID else { return }
             try await switchService.switchAccount(to: id)
             apply(try await store.loadRegistry())
             await refreshSubscriptionSnapshots()
@@ -292,6 +281,7 @@ open class AccountController {
         await cancelUsageRefresh()
         defer { isMutating = false; refreshWeeklyUsage() }
         do {
+            try await syncActiveIdentity()
             try await store.removeAccount(id: id)
             apply(try await store.loadRegistry())
             usageStates[id] = nil
@@ -359,15 +349,14 @@ open class AccountController {
         }
     }
 
-    private func confirmActiveIdentity() async {
-        guard let activeID = activeAccountID,
-              let profile = accounts.first(where: { $0.id == activeID })
-        else { return }
+    private func syncActiveIdentity() async throws {
         do {
-            let identity = try await codex.readIdentity(profileHome: await store.activeCodexHome())
-            activeIdentityConfirmed = identity.matches(profile)
+            apply(try await store.syncActiveCredential())
+            activeIdentityConfirmed = activeAccountID != nil || accounts.isEmpty
         } catch {
+            activeAccountID = nil
             activeIdentityConfirmed = false
+            throw error
         }
     }
 

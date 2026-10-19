@@ -97,6 +97,7 @@ private struct ReopenFailureSwitchService: SwitchServicing {
     let store: AccountStore
 
     func switchAccount(to targetID: UUID) async throws {
+        try await store.activateTargetCredential(id: targetID)
         try await store.commitActiveAccountID(targetID)
         throw OperationError.stage(.reopenDesktop, InjectedReopenFailure())
     }
@@ -311,8 +312,8 @@ struct CoreChecks {
         let migrated = try await reloadedMigrationStore.loadRegistry()
         try require(migrated.accounts.first?.accountID == "account-a", "legacy profile gains its saved account ID")
         try newerCredential.write(to: migrationHome.appending(path: "auth.json"))
-        let didSync = try await reloadedMigrationStore.syncActiveCredentialIfMatching(id: migrationProfile.id)
-        try require(didSync,
+        let synced = try await reloadedMigrationStore.syncActiveCredential()
+        try require(synced.activeAccountID == migrationProfile.id,
                     "matching active credential refreshes the saved profile")
         let migratedHome = await reloadedMigrationStore.profileHome(id: migrationProfile.id)
         let savedAfterSync = try Data(contentsOf: migratedHome.appending(path: "auth.json"))
@@ -320,12 +321,12 @@ struct CoreChecks {
                     "saved profile receives the refreshed credential")
         let wrongAccountCredential = try testCredential(accountID: "other-account")
         try wrongAccountCredential.write(to: migrationHome.appending(path: "auth.json"))
-        let rejectedSync = try await reloadedMigrationStore.syncActiveCredentialIfMatching(id: migrationProfile.id)
-        try require(!rejectedSync,
-                    "other account cannot replace the saved credential")
+        let externalLogin = try await reloadedMigrationStore.syncActiveCredential()
+        try require(externalLogin.activeAccountID != migrationProfile.id && externalLogin.accounts.count == 2,
+                    "external login becomes active in its own profile")
         let savedAfterRejectedSync = try Data(contentsOf: migratedHome.appending(path: "auth.json"))
         try require(savedAfterRejectedSync == newerCredential,
-                    "rejected credential leaves the saved profile intact")
+                    "external login leaves the previous profile intact")
 
         let store = AccountStore(baseURL: support, activeHomeURL: activeHome)
         let first = AccountProfile(
@@ -475,6 +476,7 @@ struct CoreChecks {
         let identity = try await client.readIdentity(profileHome: root)
         try require(identity.accountID == "acct-123", "JSONL account handshake")
 
+        try await store.activateTargetCredential(id: first.id)
         let appModel = AppModel(
             store: store,
             codex: client,
@@ -685,7 +687,8 @@ struct CoreChecks {
             .filter { $0.hasPrefix("usage-cache.json.switcher-") }
         try require(cacheTemporaryFiles.isEmpty, "failed cache replacement removes temporary file")
 
-        try require(!appModel.activeIdentityConfirmed, "precondition identity mismatch")
+        try require(appModel.activeIdentityConfirmed && appModel.activeAccountID == first.id,
+                    "local credential determines the current account despite unrelated RPC identity")
         await appModel.switchAccount(to: second.id)
         try require(appModel.activeAccountID == second.id, "reopen failure active account reload")
         try require(appModel.activeIdentityConfirmed, "reopen failure identity state")

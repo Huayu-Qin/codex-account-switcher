@@ -1,13 +1,11 @@
 ## 中文
 
-- macOS 手动启动或再次双击应用时，直接展开账号列表；菜单栏拥挤或被刘海遮挡时仍可使用这一入口。
-- 账号加载、用量刷新和更新检查随应用启动，不再依赖菜单栏图标可见。
-- 登录自动启动保持后台运行，保留系统登录项开关。账号面板沿用最多显示三个账号、更多账号滚动的布局。
-- Windows 随统一版本重新构建，本次没有 Windows 功能变更。
+- 修复重新登录另一个 Codex 账号后仍沿用旧账号标记的问题。macOS 和 Windows 现在以本机当前登录凭证为准，自动选中对应账号并同步其凭证快照，无需手动登记。
+- 新的本机登录账号会自动保存，退出登录后清除当前账号标记。同邮箱的不同工作区保持独立；无法读取的凭证会显示错误。
+- macOS 的账号确认提示和“管理账号”按钮现在显示在同一行。
 
 ## English
 
-- Manual launch and reopening the macOS app now open the account list directly, including when a crowded or notched menu bar hides its icon.
-- Account loading, usage refresh and update checks start with the application, independently of menu-bar visibility.
-- Login-item launches stay in the background and retain the system login-item setting. The account panel keeps the three-row scrolling layout.
-- Windows is rebuilt at the unified version with no Windows behavior changes in this release.
+- Fix stale active-account selection after signing in to a different Codex account. Both macOS and Windows now follow the current local credentials, select the matching account, and sync its saved credentials without manual registration.
+- Newly discovered local accounts are saved automatically, and signing out clears the active selection. Workspaces sharing an email remain separate; unreadable credentials produce a visible error.
+- Keep the macOS account-confirmation warning and Manage Accounts button on one line.
