@@ -13,16 +13,19 @@ The September 5 update adds one explicit maintenance job: keep Switcher current 
 
 ## 2. Main menu
 
-The popover uses a compact 326-point content width. Account rows keep the density and visual hierarchy of the accepted HTML prototype.
+The popover uses a 400-point content width so the reset count and saved subscription date fit without crowding adjacent account rows.
+
+The account list grows with its content up to three quarters of the current screen's usable height, then scrolls. Footer actions remain outside the scrolling list.
 
 With the default settings, each saved account row shows:
 
 - avatar or initials;
-- display name;
+- full email address when present, otherwise the display name;
 - `Resets …` on the same line as the name;
 - the label `Usage`;
 - one progress bar;
-- one `NN% left` value.
+- one `NN% left` value;
+- one detail line with the saved subscription active-until date on the left and available rate-limit reset count on the right. Dates use `YYYY-MM-DD`; missing values show `Unknown`. The date tooltip explains the login-snapshot source and check time.
 
 When `Show 5-hour Usage` is enabled and an exact five-hour window is available, the row expands to separate `5h` and `7d` lines. Each line contains its own progress bar, remaining percentage, and reset time. If the 5-hour window is missing, the row shows only `7d` and does not show an unavailable placeholder.
 
@@ -38,7 +41,7 @@ The footer divides its width equally between:
 - `Settings`;
 - `Quit`.
 
-Manage Accounts and Settings replace the popover content in place and provide a Back action. Closing the popover from either page resets the next opening to the account list.
+Manage Accounts and Settings replace the popover content in place and provide a Back action. Reopening shows Manage Accounts while sign-in is pending, so cancellation remains available; otherwise it starts on the account list.
 
 Quit directly terminates the application, remains available during mutations, and has a Command-Q equivalent.
 
@@ -133,9 +136,10 @@ Settings contains:
 - `Launch at Login`: register or unregister the main app through macOS Service Management;
 - `Show Percentage in Menu Bar`: show or hide the active account's remaining percentage;
 - `Show 5-hour Usage`: show or hide the optional 5-hour line in account rows;
+- `Status Bar Usage Window`: choose the 5-hour or weekly remaining percentage shown in the menu bar or Windows tray;
 - `Language`: `System Default`, `English`, `简体中文`.
 
-`Show 5-hour Usage` defaults to off and persists immediately in `settings.json`. It affects account rows only. The menu-bar percentage remains the active account's weekly percentage.
+`Show 5-hour Usage` defaults to off and affects account rows only. The status bar defaults to the active account's 5-hour remaining percentage and falls back to weekly when 5-hour data is unavailable. Both settings persist immediately in `settings.json`.
 
 The launch-at-login control reads the current macOS Login Item status directly. It does not duplicate that state in `settings.json`. A registered item that requires approval shows a direct link to the Login Items section in System Settings.
 
@@ -152,6 +156,8 @@ The following controls are intentionally absent:
 ## 9. Architecture
 
 The production client is a native SwiftUI menu-bar app.
+
+An AppKit application delegate owns the shared account, update and forecast models. It starts background work independently of the menu-bar label's appearance. Manual launch and Finder/Spotlight reopen events present the existing account view in a content-sized panel; login-item launch stays quiet. The panel preserves the three-account viewport and resets to the account page when explicitly reopened (or Manage Accounts while sign-in is pending). macOS controls menu-bar space, so icon visibility is not guaranteed on a crowded or notched display; the panel provides direct access in that case. The existing percentage toggle allows users to reduce the item's width.
 
 It does not require:
 

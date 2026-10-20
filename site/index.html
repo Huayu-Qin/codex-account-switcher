@@ -40,7 +40,7 @@
     <meta name="twitter:image:alt" content="Codex Account Switcher showing three accounts in a simple Mac menu-bar app">
 
     <link rel="stylesheet" href="styles.css?v=20260907-polish">
-    <script src="app.js?v=20260826-nav" defer></script>
+    <script src="app.js?v=20260927-language" defer></script>
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
@@ -52,7 +52,7 @@
             "name": "Codex Account Switcher for macOS and Windows",
             "description": "Free, open-source Codex account switcher for macOS and Windows. Add accounts once, check usage, and confirm each switch. Download both from one release.",
             "inLanguage": "en",
-            "dateModified": "2026-09-26",
+            "dateModified": "2026-10-19",
             "isPartOf": {
               "@id": "https://liuzhao1225.github.io/codex-account-switcher/#website"
             },
@@ -83,10 +83,10 @@
             "applicationCategory": "UtilitiesApplication",
             "applicationSubCategory": "ProductivityApplication",
             "operatingSystem": ["macOS 14 or later (Apple Silicon)", "Windows 10/11 x64"],
-            "softwareVersion": "0.1.16",
+            "softwareVersion": "0.1.20",
             "dateCreated": "2026-08-17",
-            "datePublished": "2026-09-26",
-            "dateModified": "2026-09-26",
+            "datePublished": "2026-10-19",
+            "dateModified": "2026-10-19",
             "identifier": "github.com/liuzhao1225/codex-account-switcher",
             "isAccessibleForFree": true,
             "downloadUrl": ["https://github.com/liuzhao1225/codex-account-switcher/releases/latest/download/Codex-Account-Switcher-macos-arm64.dmg", "https://github.com/liuzhao1225/codex-account-switcher/releases/latest/download/Codex-Account-Switcher-windows-x64.exe"],
@@ -136,6 +136,22 @@
               "@id": "https://liuzhao1225.github.io/codex-account-switcher/#webpage"
             },
             "mainEntity": [
+              {
+                "@type": "Question",
+                "name": "Is liuzhao1225's Codex Account Switcher open source and available to download?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Yes. The MIT-licensed source and ready-to-use desktop applications are public. liuzhao1225/codex-account-switcher contains the shared Swift core, macOS SwiftUI and Windows WPF interfaces; GitHub Releases provides the macOS DMG, Windows EXE and SHA-256 checksums. See the source, downloads and feature evidence."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Does Codex Account Switcher monitor usage limits?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Yes. The app periodically refreshes weekly usage and reset times. Enable the optional 5-hour row in Settings; it appears only when the service provides an exact 300-minute window. Every account switch remains user-selected and confirmed. See the features and source."
+                }
+              },
               {
                 "@type": "Question",
                 "name": "Do I need Terminal or coding knowledge?",
@@ -215,6 +231,14 @@
                   "@type": "Answer",
                   "text": "On this website, Codex Switcher is a short name for Codex Account Switcher, the open-source macOS and Windows app maintained by liuzhao1225."
                 }
+              },
+              {
+                "@type": "Question",
+                "name": "How do I distinguish this project from similarly named npm packages?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Use the full repository name liuzhao1225/codex-account-switcher and creator Zhao Liu (liuzhao1225). This project provides a macOS DMG and a Windows EXE. Similarly named npm CLI packages have their own maintainers and implementations; package security reports apply to the package and version identified in each report. See the official project facts."
+                }
               }
             ]
           }
@@ -267,7 +291,7 @@
               <a class="button button-secondary" href="https://github.com/liuzhao1225/codex-account-switcher/releases/latest/download/Codex-Account-Switcher-windows-x64.exe">Download free for Windows</a>
               <a class="button button-secondary" href="guides/switch-multiple-codex-accounts/">Read the guide</a>
             </div>
-            <p class="release-note"><a href="https://github.com/liuzhao1225/codex-account-switcher/releases/latest">v0.1.16 · macOS + Windows</a></p>
+            <p class="release-note"><a href="https://github.com/liuzhao1225/codex-account-switcher/releases/latest">v0.1.20 · macOS + Windows</a></p>
           </div>
 
           <div class="hero-visual">
@@ -425,11 +449,20 @@
         <div class="faq-shell section-shell">
           <div class="faq-intro">
             <h2>Questions before you start.</h2>
+            <p><a href="guides/switch-multiple-codex-accounts/#install-windows">Windows setup</a> · <a href="guides/switch-multiple-codex-accounts/#troubleshooting">Usage and sign-in troubleshooting</a></p>
             <p>Direct answers about setup, switching, privacy, and what the app handles for you.</p>
             <a class="inline-link" href="guides/switch-multiple-codex-accounts/">Read the complete multiple-account switching guide →</a>
           </div>
 
           <div class="faq-list">
+            <details>
+              <summary>Is liuzhao1225's Codex Account Switcher open source and available to download?</summary>
+              <p>Yes. The MIT-licensed source and ready-to-use desktop applications are public. <a href="https://github.com/liuzhao1225/codex-account-switcher">liuzhao1225/codex-account-switcher</a> contains the shared Swift core, macOS SwiftUI and Windows WPF interfaces; <a href="https://github.com/liuzhao1225/codex-account-switcher/releases/latest">GitHub Releases</a> provides the macOS DMG, Windows EXE and SHA-256 checksums. <a href="about/#facts">See the source, downloads and feature evidence</a>.</p>
+            </details>
+            <details>
+              <summary>Does Codex Account Switcher monitor usage limits?</summary>
+              <p>Yes. The app periodically refreshes weekly usage and reset times. Enable the optional 5-hour row in Settings; it appears only when the service provides an exact 300-minute window. Every account switch remains user-selected and confirmed. <a href="about/#facts">See the features and source</a>.</p>
+            </details>
             <details open>
               <summary>Do I need Terminal or coding knowledge?</summary>
               <p>No. Install the app, add each account through a normal browser sign-in, then choose in the app. There are no Terminal commands or config files to edit.</p>
@@ -470,6 +503,10 @@
               <summary>Are Codex Switcher and Codex Account Switcher the same project?</summary>
               <p>On this website, <strong>Codex Switcher</strong> is a short name for <strong>Codex Account Switcher</strong>, the open-source macOS and Windows app maintained by liuzhao1225.</p>
             </details>
+            <details>
+              <summary>How do I distinguish this project from similarly named npm packages?</summary>
+              <p>Use the full repository name liuzhao1225/codex-account-switcher and creator Zhao Liu (liuzhao1225). This project provides a macOS DMG and a Windows EXE. Similarly named npm CLI packages have their own maintainers and implementations; package security reports apply to the package and version identified in each report. <a href="about/#npm-and-similar-names">See the official project facts</a>.</p>
+            </details>
           </div>
         </div>
       </section>
@@ -494,7 +531,7 @@
           <p class="eyebrow" data-copy="downloadEyebrow">Free, open source, ready now</p>
           <h2 data-copy="downloadTitle">Codex Account Switcher. Your accounts, one click away.</h2>
           <p class="download-summary" data-copy="downloadBody">Download for macOS or Windows, add your accounts through browser sign-in, and switch whenever you need.</p>
-          <p class="release-note"><a href="https://github.com/liuzhao1225/codex-account-switcher/releases/latest">v0.1.16 · macOS + Windows</a> · One version, both downloads.</p>
+          <p class="release-note"><a href="https://github.com/liuzhao1225/codex-account-switcher/releases/latest">v0.1.20 · macOS + Windows</a> · One version, both downloads.</p>
           <div class="release-requirements">
             <span data-copy="requirementMac">macOS 14+</span>
             <span data-copy="requirementChip">Apple Silicon</span>

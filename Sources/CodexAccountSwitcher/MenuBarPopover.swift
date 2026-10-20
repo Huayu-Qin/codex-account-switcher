@@ -5,6 +5,7 @@ import SwiftUI
 struct MenuBarPopover: View {
     @ObservedObject var model: AppModel
     @ObservedObject var updater: AppUpdater
+    @ObservedObject var tiboForecast: TiboForecastModel
     @State private var page: PopoverPage = .accounts
 
     var body: some View {
@@ -48,31 +49,28 @@ struct MenuBarPopover: View {
                 }
             }
         }
-        .frame(width: 326)
-        .fixedSize(horizontal: false, vertical: true)
-        .background { NativeMenuBackground().allowsHitTesting(false) }
-        .background {
-            GeometryReader { geometry in
-                PopoverWindowSizer(contentSize: geometry.size)
-            }
-        }
+        .frame(width: 400)
         .onAppear {
             page = model.isAddingAccount ? .manageAccounts : .accounts
         }
         .task {
             await model.start()
             model.refreshWeeklyUsage()
+            await tiboForecast.refreshIfDue()
         }
     }
 
     private var accountPage: some View {
         VStack(spacing: 0) {
             if !model.activeIdentityConfirmed {
-                VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 8) {
                     Text(model.text("active_unconfirmed"))
+                        .lineLimit(1)
+                    Spacer(minLength: 8)
                     Button(model.text("manage")) {
                         page = .manageAccounts
                     }
+                    .fixedSize()
                     .disabled(model.isMutating || updater.isInstalling)
                 }
                     .font(.caption)
@@ -88,29 +86,24 @@ struct MenuBarPopover: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 28)
             } else {
-                VStack(spacing: 2) {
-                    ForEach(model.accounts) { account in
-                        Button {
-                            if account.id == model.activeAccountID {
-                                NSApp.keyWindow?.close()
-                            } else {
-                                page = .confirmSwitch(account)
+                Group {
+                    if model.accounts.count <= 3 {
+                        accountList(model.accounts)
+                    } else {
+                        // The first three rows determine the viewport's intrinsic height.
+                        accountList(Array(model.accounts.prefix(3)))
+                            .hidden()
+                            .overlay {
+                                ScrollView { accountList(model.accounts) }
                             }
-                        } label: {
-                            AccountRow(
-                                account: account,
-                                usageState: model.usageStates[account.id] ?? .idle,
-                                isActive: account.id == model.activeAccountID,
-                                language: model.settings.language,
-                                showsFiveHourUsage: model.settings.showsFiveHourUsage
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        .disabled(model.isMutating || updater.isInstalling)
                     }
                 }
-                .padding(5)
+                // Ignore the initial zero-height probe and the previous page's height.
+                .fixedSize(horizontal: false, vertical: true)
             }
+
+            Divider()
+            TiboForecastEntry(model: model, forecastModel: tiboForecast)
 
             if let version = updater.availableVersion {
                 Divider()
@@ -159,6 +152,32 @@ struct MenuBarPopover: View {
             .padding(.horizontal, 6)
             .padding(.vertical, 5)
         }
+    }
+
+    private func accountList(_ accounts: [AccountProfile]) -> some View {
+        VStack(spacing: 8) {
+            ForEach(accounts) { account in
+                Button {
+                    if account.id == model.activeAccountID {
+                        NSApp.keyWindow?.close()
+                    } else {
+                        page = .confirmSwitch(account)
+                    }
+                } label: {
+                    AccountRow(
+                        account: account,
+                        usageState: model.usageStates[account.id] ?? .idle,
+                        subscription: model.subscriptionSnapshots[account.id],
+                        isActive: account.id == model.activeAccountID,
+                        language: model.settings.language,
+                        showsFiveHourUsage: model.settings.showsFiveHourUsage
+                    )
+                }
+                .buttonStyle(.plain)
+                .disabled(model.isMutating || updater.isInstalling)
+            }
+        }
+        .padding(8)
     }
 }
 

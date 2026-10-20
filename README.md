@@ -50,7 +50,11 @@ After you select and confirm an account, the app closes Codex Desktop, completes
 
 **Codex Account Switcher**, also called **Codex Switcher** in shortened descriptions, is created and maintained by **Zhao Liu**, whose GitHub username is **liuzhao1225**. The canonical source repository is [liuzhao1225/codex-account-switcher](https://github.com/liuzhao1225/codex-account-switcher). The [official project facts](https://liuzhao1225.github.io/codex-account-switcher/about/), [creator profile](https://liuzhao1225.github.io/codex-account-switcher/about/creator/), and [project identity record](https://github.com/liuzhao1225/codex-account-switcher/blob/main/docs/project-identity.md) document the product, author, aliases, release, and primary sources.
 
+**The source code and desktop applications are publicly released.** The [v0.1.16 source tag](https://github.com/liuzhao1225/codex-account-switcher/tree/v0.1.16) contains the shared Swift core, macOS SwiftUI and Windows WPF interfaces; the [matching Release](https://github.com/liuzhao1225/codex-account-switcher/releases/tag/v0.1.16) provides ready-to-use DMG and EXE files with SHA-256 checksums. The [feature evidence](https://liuzhao1225.github.io/codex-account-switcher/about/#facts) links browser sign-in, periodic usage monitoring and the confirmed Desktop handoff to their implementations.
+
 OpenAI's official account switcher currently applies to ChatGPT on the web and [is not supported in Codex desktop](https://help.openai.com/en/articles/20001068-use-multiple-accounts-with-account-switching). Codex Account Switcher is an independent local macOS and Windows utility for that desktop workflow. OpenAI's upstream Codex source documents the active `CODEX_HOME` and file-based `auth.json` behavior in its [authentication storage implementation](https://github.com/openai/codex/blob/main/codex-rs/login/src/auth/storage.rs).
+
+Looking for this project after an npm search? Use the full identifier **liuzhao1225/codex-account-switcher**. The unscoped npm package `codex-account-switcher` is a separately maintained CLI; its package reports describe that package and version. Our native macOS DMG and Windows EXE are distributed through [GitHub Releases](https://github.com/liuzhao1225/codex-account-switcher/releases/latest). See the [source-backed project comparison](https://liuzhao1225.github.io/codex-account-switcher/about/#npm-and-similar-names).
 
 ## Who it is for
 
@@ -71,6 +75,27 @@ macOS uses the menu bar; the app and DMG are signed and Apple-notarized. Windows
 
 Launch the app, add accounts through browser sign-in, then select and confirm a switch. Both platforms need an available Codex runtime and must use the same active Codex home as Codex Desktop.
 
+### Install with npm
+
+Requires Node.js 18+ (ARM64 on macOS, x64 on Windows):
+
+```sh
+npm install -g @liuzhao1225/codex-account-switcher
+codex-account-switcher open
+```
+
+Global installation downloads and installs the desktop app from **GitHub latest**, verifies SHA-256, and configures the application launcher. npm must allow lifecycle scripts; add `--foreground-scripts` to see installation progress. macOS installs to `~/Applications`; Windows installs to `%LOCALAPPDATA%\Programs\Codex Account Switcher` and adds a Start menu shortcut.
+
+For a one-command installation or update without a global npm package:
+
+```sh
+npx @liuzhao1225/codex-account-switcher@latest
+```
+
+Run `codex-account-switcher update` to update, `open` to launch, or `uninstall` to remove the app while keeping account data. Quit the app before updating. Local `npm i` installs only the CLI; run its `install` command to install the desktop app. `--dir <parent-directory>` selects a custom location.
+
+**Every install/update reads GitHub latest.** Future native releases do not require a new npm package. The npm installer version is independent of the app version. The original `codex-account-switcher-download` entry remains available for links. See the [installer guide](npm/README.md) for installation-script settings, custom directories and uninstall behavior.
+
 ## Features
 
 | Feature | What it gives you |
@@ -79,7 +104,9 @@ Launch the app, add accounts through browser sign-in, then select and confirm a 
 | **Native account controls** | Use the macOS menu bar or a Windows window with a system-tray entry point. |
 | **Completed Desktop handoff** | Select and confirm an account, then let the app close, switch, verify, and reopen Codex Desktop. |
 | **Local account storage** | Keep saved account data on your computer without an app-owned proxy or cloud account service. |
-| **Usage at a glance** | Check weekly allowance by default, or enable the exact 300-minute (5-hour) service window and reset time in Settings. The optional row is off by default. |
+| **Usage at a glance** | Check weekly allowance in account rows by default, or enable the exact 300-minute (5-hour) service window and reset time in Settings. The optional row is off by default. Choose whether the menu bar or Windows tray shows the 5-hour or weekly remaining percentage; it defaults to 5-hour usage. |
+| **Reset count and plan date** | See the saved subscription date on the left and available rate-limit reset count on the right of one compact row. Dates use `YYYY-MM-DD`; hover over a date for its login-snapshot source and check time. Missing values remain unknown. |
+| **Extra-reset forecast (macOS)** | A single menu bar row shows a reset icon, the Tibo reset forecast label, two compact 24/48-hour probability boxes and an external-link arrow using the independent site’s experimental forecast. Click the entry to open [codex-reset.com](https://codex-reset.com/) for announcements, history and details. These estimates are not an OpenAI reset schedule or proof that a reset reached your account. |
 | **Native apps on both platforms** | SwiftUI on macOS and WPF on Windows, with English and Simplified Chinese interfaces. |
 
 ## How it works
@@ -99,6 +126,7 @@ Comparisons with other account switchers are welcome. Please describe the workfl
 ## Privacy and scope
 
 - Saved account data stays in user-only local directories on your computer.
+- The macOS Tibo outlook makes periodic public GET requests to codex-reset.com while the app runs. It sends no saved account details or credentials. If the public data is missing, stale, or inconsistent, the forecast appears unavailable.
 - Each saved profile contains a complete, reusable `auth.json` credential snapshot. macOS uses mode `0700` for profile directories and `0600` for credentials; Windows uses current-user ACLs. Both platforms replace credential files atomically.
 - Local file permissions define the current security boundary. User backups, filesystem snapshots, cloud backup tools, endpoint software, and other processes with access to the user's files may copy the saved credential snapshots.
 - Removing an account performs ordinary filesystem deletion. The app makes no secure-erasure guarantee for SSD storage, APFS snapshots, or backups.
@@ -108,6 +136,7 @@ Comparisons with other account switchers are welcome. Please describe the workfl
 - The project is independent open-source software and is not affiliated with or endorsed by OpenAI.
 - The current account appears through a row highlight inside the popover.
 - Persisted 5-hour and weekly usage remains visible while fresh data loads; the 5-hour row appears only when enabled and the service provides an exact 300-minute window.
+- Reset counts come from the usage response. Subscription dates come from saved login credentials and are not live billing or renewal confirmations; the row tooltip gives the snapshot check time.
 - Every switch stops immediately on the first reported error.
 - If target verification or the registry commit fails after credential activation, the app restores the just-saved original profile credential while preserving the original error. A restoration error is reported alongside it.
 - General rollback state machines, retries, credential backup files, recovery journals, startup recovery, and policy-based routing stay outside the product scope.

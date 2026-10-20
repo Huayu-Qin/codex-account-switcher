@@ -58,7 +58,9 @@ As a user, I can choose System Default, English, or Simplified Chinese.
 
 The menu-bar item uses a compact account-group icon with an accessibility label. It does not wait for account or Usage data before appearing.
 
-The popover content width is 326 points.
+The popover content width is 400 points.
+
+Manual launch and reopening the running app from Finder or Spotlight show the account list in a separate, content-sized panel. This entry remains available when macOS hides the menu-bar item because the bar is full or the camera housing obstructs it. Closing the panel keeps the menu-bar app running. Login-item launches stay in the background; account loading and refresh start independently of menu-bar visibility.
 
 ## 5. Account row
 

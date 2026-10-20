@@ -16,6 +16,14 @@ git tag -a v0.1.12 -m 'v0.1.12' origin/main
 git push origin v0.1.12
 ```
 
+## macOS signing credentials
+
+Direct distribution uses a [Developer ID Application certificate](https://developer.apple.com/help/account/certificates/create-developer-id-certificates/) issued by the G2 intermediary, hardened runtime, and Apple notarization through a team App Store Connect API key with the Developer role. The app and DMG must both pass notarization, stapling, and Gatekeeper checks before publication.
+
+Keep the certificate and notarization key in the same Apple Developer team. The release workflow reads five GitHub Actions repository secrets: `BUILD_CERTIFICATE_BASE64` (the certificate and private key exported as P12), `P12_PASSWORD`, `APP_STORE_CONNECT_API_KEY_BASE64` (the P8 private key), `APP_STORE_CONNECT_KEY_ID`, and `APP_STORE_CONNECT_ISSUER_ID`. Validate the P12 signing identity and the key with `notarytool history` before updating these secrets.
+
+When changing the Developer ID certificate, retain `SPARKLE_PRIVATE_KEY` and the public key in `scripts/sparkle-public-key.txt` so existing installations can verify the update, following [Sparkle's key rotation rules](https://sparkle-project.org/documentation/#rotating-signing-keys). Keep local private-key copies outside Git with owner-only permissions. A credential-only repair can rerun the failed release for the existing immutable tag after confirming no release already exists.
+
 ## Assets and updates
 
 Each release includes:

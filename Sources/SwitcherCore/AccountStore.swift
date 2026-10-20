@@ -139,6 +139,24 @@ public actor AccountStore: AccountStoring {
         profilesURL.appending(path: id.uuidString, directoryHint: .isDirectory)
     }
 
+    public func readSubscriptionSnapshot(profile: AccountProfile, isActive: Bool) -> SubscriptionSnapshot? {
+        func read(_ path: URL) -> SubscriptionSnapshot? {
+            guard let credential = try? readChecked(path) else { return nil }
+            return SubscriptionSnapshotReader.read(
+                credential: credential,
+                expectedAccountID: profile.accountID,
+                expectedEmail: profile.email
+            )
+        }
+
+        let saved = read(profileHome(id: profile.id).appending(path: "auth.json"))
+        guard isActive else { return saved }
+        let current = read(activeHomeURL.appending(path: "auth.json"))
+        guard let current else { return saved }
+        guard let saved else { return current }
+        return current.lastChecked >= saved.lastChecked ? current : saved
+    }
+
     public func activeCodexHome() -> URL { activeHomeURL }
 
     public func activeCredentialExists() -> Bool {
@@ -159,8 +177,12 @@ public actor AccountStore: AccountStoring {
         guard fileManager.fileExists(atPath: source.path) else {
             throw AccountStoreError.activeCredentialMissing
         }
-        _ = try createProfileDirectory(id: profile.id)
-        try copyCredential(from: source, to: profileHome(id: profile.id).appending(path: "auth.json"))
+        try importProfile(profile, credential: readChecked(source))
+    }
+
+    private func importProfile(_ profile: AccountProfile, credential: Data) throws {
+        let home = try createProfileDirectory(id: profile.id)
+        try secureAtomicWrite(credential, to: home.appending(path: "auth.json"))
 
         var current = try loadRegistry()
         current.accounts.append(profile)
@@ -201,35 +223,42 @@ public actor AccountStore: AccountStoring {
     }
 
     public func registerActiveIdentity(_ identity: AccountIdentity) throws {
-        var current = try loadRegistry()
         let bytes = try readChecked(activeHomeURL.appending(path: "auth.json"))
+        try registerActiveIdentity(identity, credential: bytes)
+    }
+
+    private func registerActiveIdentity(_ identity: AccountIdentity, credential bytes: Data) throws {
+        let current = try loadRegistry()
         let candidate = AccountProfile(id: UUID(), displayName: identity.suggestedDisplayName,
             email: identity.email, accountID: identity.accountID, createdAt: Date(), lastUsedAt: Date())
         guard let credentialIdentity = try CredentialIdentity.decode(bytes), credentialIdentity.matches(candidate) else {
             throw AccountStoreError.activeCredentialMismatch
         }
         if let profile = current.accounts.first(where: { identity.matches($0) }) {
-            try secureAtomicWrite(bytes, to: profileHome(id: profile.id).appending(path: "auth.json"))
-            try commitActiveAccountID(profile.id)
+            let destination = profileHome(id: profile.id).appending(path: "auth.json")
+            if try readChecked(destination) != bytes { try secureAtomicWrite(bytes, to: destination) }
+            if current.activeAccountID != profile.id { try commitActiveAccountID(profile.id) }
         } else {
-            let home = try createProfileDirectory(id: candidate.id)
-            try secureAtomicWrite(bytes, to: home.appending(path: "auth.json"))
-            current.accounts.append(candidate)
-            current.activeAccountID = candidate.id
-            try saveRegistry(current)
+            try importProfile(candidate, credential: bytes)
         }
     }
 
-    /// Verify and copy the same bytes, so an external login cannot overwrite another saved account.
-    public func syncActiveCredentialIfMatching(id: UUID) throws -> Bool {
-        let current = try loadRegistry()
-        guard current.activeAccountID == id,
-              let profile = current.accounts.first(where: { $0.id == id }) else { return false }
+    /// The live login determines the active profile. Identify and save the same credential bytes.
+    public func syncActiveCredential() throws -> AccountRegistry {
+        var current = try loadRegistry()
+        guard activeCredentialExists() else {
+            if current.activeAccountID != nil {
+                current.activeAccountID = nil
+                try saveRegistry(current)
+            }
+            return current
+        }
         let bytes = try readChecked(activeHomeURL.appending(path: "auth.json"))
-        guard let identity = try CredentialIdentity.decode(bytes), identity.matches(profile) else { return false }
-        let destination = profileHome(id: id).appending(path: "auth.json")
-        if try readChecked(destination) != bytes { try secureAtomicWrite(bytes, to: destination) }
-        return true
+        guard let identity = try CredentialIdentity.decode(bytes) else {
+            throw CodexClientError.identityUnavailable
+        }
+        try registerActiveIdentity(identity, credential: bytes)
+        return try loadRegistry()
     }
 
     public func removeAccount(id: UUID) throws {
@@ -301,8 +330,7 @@ public actor AccountStore: AccountStoring {
         try checkPath(activeHomeURL)
         try fileManager.createDirectory(at: activeHomeURL, withIntermediateDirectories: true)
         let destination = activeHomeURL.appending(path: "auth.json")
-        let bytes = try readChecked(source)
-        try secureAtomicWrite(bytes, to: destination)
+        try copyCredential(from: source, to: destination)
     }
 
     public func commitActiveAccountID(_ id: UUID) throws {

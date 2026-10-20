@@ -8,13 +8,13 @@ The Windows application keeps the macOS account flow and uses Microsoft WPF Flue
 
 The compact window follows the existing macOS account flow:
 
-- Account rows show email, reset time and remaining usage. Email titles stay on one line with ellipsis and reveal the full address on hover; accounts without email use their saved name. Select a row, then confirm to switch.
+- Account rows show email, reset time, remaining usage, available rate-limit resets, and a saved login snapshot of the subscription active-until date. Missing dates appear as Unknown; hovering shows when the login snapshot was last checked. The date is not a live billing or renewal query. Email titles stay on one line with ellipsis and reveal the full address on hover; accounts without email use their saved name. Select a row, then confirm to switch.
 - Manage Accounts uses the same email titles and contains browser sign-in, register current login and removal of inactive accounts. The browser sign-in hint sits to the right of Add Account on one line.
 - Settings take effect immediately: launch at login, tray tooltip percentage, optional 5-hour usage and language.
 - Usage refreshes at startup, when opening the window, and every five minutes. Failed refreshes retain the last good value.
 - Updates are checked hourly when enabled. A new Windows version opens its release download page; the running EXE is not replaced automatically.
 
-The app opens a centered Windows window with a standard title bar, minimize and close controls, and a taskbar entry. It stays visible when focus moves to another app or the browser. The tray uses the original transparent logo, sized to the native notification-area canvas, with optional usage in its hover tooltip. Its black/white variant follows the taskbar theme independently of the app theme. It is an additional entry point; reopening the EXE brings the existing window forward. The title-bar Close button hides the window while the tray icon and background work remain active. Left-click the tray icon to reopen the window; right-click it and choose Quit to exit. Active account operations must finish before quitting.
+The app opens a centered Windows window with a standard title bar, minimize and close controls, and a taskbar entry. It stays visible when focus moves to another app or the browser. When tray percentage is enabled and usage is available, the tray icon itself shows the selected usage window's remaining percentage as a number; the hover tooltip includes the account name and `%` value. Otherwise the tray uses the original transparent logo. The icon follows the taskbar theme independently of the app theme. It is an additional entry point; reopening the EXE brings the existing window forward. The title-bar Close button hides the window while the tray icon and background work remain active. Left-click the tray icon to reopen the window; right-click it and choose Quit to exit. Active account operations must finish before quitting.
 
 ## Shared logic and native boundaries
 

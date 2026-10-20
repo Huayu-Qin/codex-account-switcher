@@ -4,20 +4,6 @@ import Testing
 
 @MainActor
 struct AccountControllerTests {
-    @Test func menuBarUsesSavedNameAndFiveHourQuota() async throws {
-        let fixture = try ControllerFixture()
-        defer { fixture.clean() }
-        try fixture.writeActiveCredential()
-        await fixture.model.start()
-        let id = try #require(fixture.model.activeAccountID)
-        await fixture.model.renameAccount(id: id, name: " Work ")
-        #expect(fixture.model.activeAccountName == "Work")
-        fixture.model.refreshWeeklyUsage()
-        await fixture.model.waitForWeeklyUsageRefresh()
-        #expect(fixture.model.activeFiveHourRemainingPercent == 23)
-        #expect(fixture.model.activeRemainingPercent == 72)
-    }
-
     @Test func firstActivationInstallsAndCommitsTheSavedAccount() async throws {
         let fixture = try ControllerFixture()
         defer { fixture.clean() }
@@ -84,6 +70,20 @@ struct AccountControllerTests {
         #expect(fixture.model.visibleError == nil)
     }
 
+    @Test func startupUsesTheLocalCredentialAsTheIdentitySource() async throws {
+        let fixture = try ControllerFixture()
+        defer { fixture.clean() }
+        let credential = Data(#"{"tokens":{"account_id":"different-workspace"}}"#.utf8)
+        try credential.write(to: fixture.active.appendingPathComponent("auth.json"))
+        await fixture.model.start()
+        #expect(fixture.model.accounts.count == 1)
+        #expect(fixture.model.accounts.first?.accountID == "different-workspace")
+        #expect(fixture.model.activeAccountID == fixture.model.accounts.first?.id)
+        #expect(fixture.model.activeIdentityConfirmed)
+        #expect(fixture.model.visibleError == nil)
+        #expect(try Data(contentsOf: fixture.active.appendingPathComponent("auth.json")) == credential)
+    }
+
     @Test func registerUsesExistingIdentityAndPreservesProfile() async throws {
         let fixture = try ControllerFixture()
         defer { fixture.clean() }
@@ -119,10 +119,24 @@ struct AccountControllerTests {
         await fixture.model.setLanguage(.simplifiedChinese)
         await fixture.model.setShowsMenuBarPercentage(false)
         await fixture.model.setShowsFiveHourUsage(true)
+        await fixture.model.setStatusBarUsageWindow(.weekly)
         let saved = try await fixture.store.loadSettings()
         #expect(saved.language == .simplifiedChinese)
         #expect(!saved.showsMenuBarPercentage)
         #expect(saved.showsFiveHourUsage)
+        #expect(saved.statusBarUsageWindow == .weekly)
+    }
+
+    @Test func statusBarUsesSelectedUsageWindow() async throws {
+        let fixture = try ControllerFixture()
+        defer { fixture.clean() }
+        try fixture.writeActiveCredential()
+        await fixture.model.start()
+        fixture.model.refreshWeeklyUsage()
+        await fixture.model.waitForWeeklyUsageRefresh()
+        #expect(fixture.model.activeRemainingPercent == 18)
+        await fixture.model.setStatusBarUsageWindow(.weekly)
+        #expect(fixture.model.activeRemainingPercent == 72)
     }
 
     @Test func activeProfileCannotBeRemoved() async throws {
@@ -165,7 +179,11 @@ private struct ControllerFixture {
             switchService: SwitchService(desktop: FixtureDesktop(), store: store, codex: client))
     }
     func writeActiveCredential() throws {
-        try Data(#"{"tokens":{"account_id":"demo-account","access_token":"fixture-secret-token"}}"#.utf8)
+        let claims = Data(#"{"email":"demo@example.test"}"#.utf8).base64EncodedString()
+        try JSONSerialization.data(withJSONObject: ["tokens": [
+            "account_id": "demo-account", "access_token": "fixture-secret-token",
+            "id_token": "header.\(claims).signature",
+        ]])
             .write(to: active.appendingPathComponent("auth.json"))
     }
     func clean() { try? FileManager.default.removeItem(at: root) }
@@ -179,7 +197,11 @@ private actor FixtureClient: AccountClient {
     }
     func readWeeklyUsage(profileHome: URL) async throws -> WeeklyUsage {
         if usageFails { throw CodexClientError.connectionClosed }
-        return WeeklyUsage(remainingPercent: 72, resetsAt: Date(timeIntervalSince1970: 2_000_000_000), fiveHourRemainingPercent: 23)
+        return WeeklyUsage(
+            remainingPercent: 72,
+            resetsAt: Date(timeIntervalSince1970: 2_000_000_000),
+            fiveHourRemainingPercent: 18
+        )
     }
     func login(profileHome: URL) async throws -> AccountIdentity {
         throw CodexClientError.loginFailed("Fixture login is disabled.")

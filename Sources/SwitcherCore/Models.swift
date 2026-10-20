@@ -43,25 +43,36 @@ public enum AppLanguage: String, Codable, CaseIterable, Identifiable, Sendable {
     public var id: String { rawValue }
 }
 
+public enum StatusBarUsageWindow: String, Codable, CaseIterable, Identifiable, Sendable {
+    case fiveHour
+    case weekly
+
+    public var id: String { rawValue }
+}
+
 public struct AppSettings: Codable, Equatable, Sendable {
     public var language: AppLanguage
     public var showsMenuBarPercentage: Bool
     public var showsFiveHourUsage: Bool
+    public var statusBarUsageWindow: StatusBarUsageWindow
 
     public static let `default` = AppSettings(
         language: .system,
         showsMenuBarPercentage: true,
-        showsFiveHourUsage: false
+        showsFiveHourUsage: false,
+        statusBarUsageWindow: .fiveHour
     )
 
     public init(
         language: AppLanguage,
         showsMenuBarPercentage: Bool = true,
-        showsFiveHourUsage: Bool = false
+        showsFiveHourUsage: Bool = false,
+        statusBarUsageWindow: StatusBarUsageWindow = .fiveHour
     ) {
         self.language = language
         self.showsMenuBarPercentage = showsMenuBarPercentage
         self.showsFiveHourUsage = showsFiveHourUsage
+        self.statusBarUsageWindow = statusBarUsageWindow
     }
 
     public init(from decoder: any Decoder) throws {
@@ -75,6 +86,10 @@ public struct AppSettings: Codable, Equatable, Sendable {
             Bool.self,
             forKey: .showsFiveHourUsage
         ) ?? false
+        statusBarUsageWindow = try container.decodeIfPresent(
+            StatusBarUsageWindow.self,
+            forKey: .statusBarUsageWindow
+        ) ?? .fiveHour
     }
 }
 
@@ -83,17 +98,20 @@ public struct WeeklyUsage: Codable, Equatable, Sendable {
     public let resetsAt: Date
     public let fiveHourRemainingPercent: Int?
     public let fiveHourResetsAt: Date?
+    public let resetCreditsRemaining: Int?
 
     public init(
         remainingPercent: Int,
         resetsAt: Date,
         fiveHourRemainingPercent: Int? = nil,
-        fiveHourResetsAt: Date? = nil
+        fiveHourResetsAt: Date? = nil,
+        resetCreditsRemaining: Int? = nil
     ) {
         self.remainingPercent = remainingPercent
         self.resetsAt = resetsAt
         self.fiveHourRemainingPercent = fiveHourRemainingPercent
         self.fiveHourResetsAt = fiveHourResetsAt
+        self.resetCreditsRemaining = resetCreditsRemaining
     }
 }
 

@@ -24,9 +24,17 @@ Require the `Test run with ... tests ... passed` summary before treating the sui
 
 ## 2. Unit tests
 
+### macOS account popover sizing (v0.1.18)
+
+`MenuBarPopoverTests` measures the production SwiftUI view with 0, 1, 2, 3, 4, and 20 saved accounts, with five-hour usage both hidden and shown. The initial zero-height proposal and the sizes left by account management and settings must yield the same home height. One through three accounts increase the height; four and twenty retain the three-account viewport.
+
+The pre-fix zero-height probe returned only 84 points, leaving the forecast and footer visible while collapsing the accounts. Local interaction with the production view in an isolated SwiftUI window verified that three rows remain visible, scrolling reaches accounts 4–6, and returning from both subpages restores the original home height. This fixture uses synthetic accounts and does not switch real Codex credentials.
+
 ### Active credential refresh and Desktop updates (v0.1.16)
 
-`CredentialSyncTests` covers refreshed live credentials, refusal to copy a different workspace with the same email, legacy IDs populated from each saved profile, registration after an external login changes, and a usage response deliberately returned after cancellation during a switch. The controller drains the old refresh before mutating credentials and starts a fresh read afterward. The quota client cancellation test also verifies that a silent pending request stops before its request timeout.
+The current local `auth.json` determines the active account at startup, during usage refresh, and before switching or removing an account. An external login selects its matching saved profile or imports a new profile; signing out clears the active selection. Credentials are copied only to the profile matching their account ID, including when multiple workspaces share an email address. Unreadable or malformed credentials stop the operation and display an error.
+
+`CredentialSyncTests` covers external login changes, login after an empty startup, sign-out and re-login, refreshed credentials, preservation of other workspaces, legacy IDs populated from each saved profile, registration after an external login changes, and a usage response deliberately returned after cancellation during a switch. The controller drains the old refresh before mutating credentials and starts a fresh read afterward. The quota client cancellation test also verifies that a silent pending request stops before its request timeout.
 
 Windows CI runs an isolated WinForms Desktop fixture through two versioned installation directories using the same long-lived `DesktopController`. It verifies rediscovery for every close/open operation. WPF checks reopen a pending login and require the enabled cancellation button. These checks do not verify a complete handoff of the real Store-packaged Codex app.
 
@@ -145,8 +153,8 @@ Verify:
 - progress-bar accessibility value equals `NN% left`;
 - footer contains equal-width Manage Accounts, Settings, and Quit actions;
 - Manage Accounts and Settings navigate inside the popover;
-- reopening after closing a secondary page starts on the account list;
-- Settings contains Launch at Login, Show Percentage in Menu Bar, Show 5-hour Usage, and Language in that order;
+- reopening after closing a secondary page starts on the account list, or Manage Accounts while sign-in is pending;
+- Settings contains Launch at Login, Show Percentage in Menu Bar, Status Bar Usage, Show 5-hour Usage, and Language in that order;
 - Login Item status maps `notRegistered`, `enabled`, `requiresApproval`, and `notFound` to disabled, enabled, approval-required, and unavailable UI states;
 - all three Settings toggles expose localized accessibility labels;
 - switch confirmation describes Desktop and CLI consequences;
@@ -156,11 +164,18 @@ Verify:
 - a short-interval timer test proves that a manual refresh postpones the previous deadline and cancellation stops later rounds;
 - active profile remove button is disabled;
 - disabling Show 5-hour Usage restores the existing weekly row layout;
-- the menu-bar percentage remains weekly when 5-hour display is enabled.
+- the status bar defaults to 5-hour remaining Usage, follows the selected window independently of account-row visibility, and falls back to weekly Usage when 5-hour data is absent.
 
 ## 6. Manual test matrix
 
 With the packaged application:
+
+- quit and launch from Finder; confirm the account panel appears without clicking the menu bar;
+- close the panel with Escape or the close button, then double-click the running app in Finder; confirm one account panel reopens;
+- repeat with Settings or Manage Accounts open; confirm explicit reopen returns to the account list;
+- navigate to Settings and Manage Accounts and back; confirm content-derived height and the existing three-account scrolling limit;
+- test with a crowded/notched menu bar; confirm the independent panel stays accessible, and the percentage toggle reduces icon width;
+- `StartupTests` exercises the actual open-application Apple-event marker for quiet login launch; a real logout/login remains a separate manual check.
 
 1. open Settings and enable Launch at Login;
 2. confirm `sfltool dumpbtm` contains `com.liuzhao.codex-account-switcher`;
@@ -174,7 +189,7 @@ With two real test accounts:
 2. add Account B;
 3. open menu and confirm the existing weekly layout for both;
 4. enable Show 5-hour Usage and confirm available 5h and 7d rows, then verify an account without 5-hour data omits only the 5h row;
-5. confirm the menu-bar percentage still matches weekly Usage;
+5. confirm the status bar matches 5-hour remaining Usage by default, switch Status Bar Usage to weekly and verify its weekly value, then confirm an account without 5-hour data uses the weekly value;
 6. start a Codex CLI under A;
 7. switch A → B;
 8. with an active local chat, leave Desktop's native quit dialog pending and confirm a close-stage error after 30 seconds, with account A still active and Desktop still running; then finish or stop the task and close Desktop normally;
@@ -215,9 +230,9 @@ The release workflow runs only on `v*` tag pushes under one repository-wide rele
 - ordinary `main` pushes do not start the release workflow and the workflow never creates or pushes a tag;
 - `CITATION.cff`, the package default, and CodexClient declare the same semantic version;
 - the derived `RELEASE_TAG` identifies the GitHub Release, while the DMG and checksum use fixed asset names compatible with `releases/latest/download/...`;
-- tag events require the event tag, repository version, checked-out commit, and `origin/main` commit to match;
-- an existing GitHub Release sets `SHOULD_RELEASE=false` and all tests, signing, notarization, packaging, and publication steps skip successfully;
-- a missing Release sets `SHOULD_RELEASE=true`, then the tag workflow runs tests, signing, notarization, packaging, checksum generation, and `gh release create --latest --verify-tag`;
+- tag events require the event tag and repository version to match, the checkout to equal the tagged commit, and that commit to be an ancestor of `origin/main`;
+- an existing GitHub Release fails validation before build or publication so published assets cannot be replaced;
+- a missing Release proceeds through both platforms' tests and packaging, macOS signing and notarization, artifact verification, and `gh release create --latest --verify-tag`;
 - conflicting tags and API failures stop with the original values visible.
 
 ## 9. Whole-project ablation and integrity regression

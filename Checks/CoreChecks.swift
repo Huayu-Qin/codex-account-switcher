@@ -60,13 +60,8 @@ private actor FakeStore: AccountStoring {
         AccountRegistry(activeAccountID: original.id, accounts: [original, target])
     }
     func profile(id: UUID) -> AccountProfile { target }
-    func profileHome(id: UUID) -> URL { URL(fileURLWithPath: "/tmp/target") }
     func activeCodexHome() -> URL { URL(fileURLWithPath: "/tmp/active") }
     func activeCredentialExists() -> Bool { true }
-    func createProfileDirectory(id: UUID) -> URL { URL(fileURLWithPath: "/tmp/target") }
-    func importCurrentProfile(_ profile: AccountProfile) {}
-    func addProfile(_ profile: AccountProfile) {}
-    func removeAccount(id: UUID) {}
     func saveCurrentCredential() async { await recorder.append(.saveCurrentCredential) }
     func activateTargetCredential(id: UUID) async { await recorder.append(.activateTargetCredential) }
     func restoreActiveCredential(id: UUID) {}
@@ -102,6 +97,7 @@ private struct ReopenFailureSwitchService: SwitchServicing {
     let store: AccountStore
 
     func switchAccount(to targetID: UUID) async throws {
+        try await store.activateTargetCredential(id: targetID)
         try await store.commitActiveAccountID(targetID)
         throw OperationError.stage(.reopenDesktop, InjectedReopenFailure())
     }
@@ -110,6 +106,93 @@ private struct ReopenFailureSwitchService: SwitchServicing {
 private func createExecutable(at url: URL, body: String) throws {
     try Data("#!/bin/sh\n\(body)\n".utf8).write(to: url)
     try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: url.path)
+}
+
+private func testCredential(
+    accountID: String = "account-a",
+    email: String = "a@example.com",
+    plan: String = "plus",
+    activeUntil: String? = "2026-10-17T12:00:00Z",
+    lastChecked: String? = "2026-10-03T12:00:00Z"
+) throws -> Data {
+    var account: [String: Any] = ["chatgpt_account_id": accountID, "chatgpt_plan_type": plan]
+    account["chatgpt_subscription_active_until"] = activeUntil
+    account["chatgpt_subscription_last_checked"] = lastChecked
+    let payload: [String: Any] = ["email": email, "https://api.openai.com/auth": account]
+    let encoded = try JSONSerialization.data(withJSONObject: payload).base64EncodedString()
+        .replacingOccurrences(of: "+", with: "-")
+        .replacingOccurrences(of: "/", with: "_")
+        .replacingOccurrences(of: "=", with: "")
+    return try JSONSerialization.data(withJSONObject: ["tokens": ["id_token": "header.\(encoded).signature"]])
+}
+
+private func testTiboForecastReader() throws {
+    let now = Date(timeIntervalSince1970: 1_791_149_623)
+    let iso = ISO8601DateFormatter()
+    func event(_ daysAgo: Int, group: String = "reset", state: String = "announced") -> [String: Any] {
+        let postedAt = now.addingTimeInterval(-Double(daysAgo * 86_400))
+        let milliseconds = UInt64(postedAt.timeIntervalSince1970 * 1_000)
+        let id = String((milliseconds - 1_288_834_974_657) << 22)
+        return [
+            "id": id, "group": group, "announcement_state": state,
+            "url": "https://x.com/thsottiaux/status/\(id)",
+            "summary": "Fictional reset fixture", "announced_at": iso.string(from: postedAt),
+        ]
+    }
+    var events = (1...6).map { event($0) }
+    events.append(event(7, group: "credits"))
+    events.append(event(8, state: "none"))
+    let conditionalPlanID = "2106845241357824205"
+    events.append([
+        "id": conditionalPlanID, "group": "reset", "announcement_state": "none",
+        "url": "https://x.com/thsottiaux/status/\(conditionalPlanID)",
+        "summary": "Over the next 28 days, each day we'll either ship an improvement or ship a full reset.",
+    ])
+    let forecastPayload: [String: Any] = [
+        "updated_at": iso.string(from: now),
+        "last_reset_at": iso.string(from: now.addingTimeInterval(-86_400)),
+        "probabilities": ["rounded_24h": 16, "rounded_48h": 29],
+        "confidence": "low",
+        "time_window": ["start_hour": 7, "end_hour": 10, "timezone": "Asia/Shanghai"],
+    ]
+    let forecastData = try JSONSerialization.data(withJSONObject: forecastPayload)
+    func timelineData(_ events: [[String: Any]]) throws -> Data {
+        try JSONSerialization.data(withJSONObject: ["updated_at": iso.string(from: now), "events": events])
+    }
+    let result = try TiboResetForecastReader.read(
+        forecast: forecastData, timeline: timelineData(events), now: now
+    )
+    try require(result.next24HourPercent == 16 && result.next48HourPercent == 29,
+                "public Tibo probability fields")
+    try require(result.events.count == 6, "credits and unconfirmed posts do not enter history")
+    try require(result.forwardSignal?.url.absoluteString ==
+                "https://x.com/thsottiaux/status/\(conditionalPlanID)",
+                "the conditional plan is shown separately from confirmed resets")
+    try require(result.events[0].postedAt == now.addingTimeInterval(-86_400),
+                "post time comes from the original X status ID")
+    try require(result.recentMedianDays == 1 && result.historicalNextWindow != nil,
+                "historical window uses the latest five confirmed post gaps")
+    events[5]["url"] = "https://x.com/another-author/status/\(events[5]["id"]!)"
+    let filtered = try TiboResetForecastReader.read(
+        forecast: forecastData, timeline: timelineData(events), now: now
+    )
+    try require(filtered.events.count == 5, "other authors cannot enter Tibo history")
+    try require(filtered.recentMedianDays == nil && filtered.historicalNextWindow == nil,
+                "historical window requires five confirmed intervals")
+    events[8]["url"] = "https://x.com/not-tibo/status/\(conditionalPlanID)"
+    let invalidSignal = try TiboResetForecastReader.read(
+        forecast: forecastData, timeline: timelineData(events), now: now
+    )
+    try require(invalidSignal.forwardSignal == nil,
+                "a non-original URL cannot support the conditional plan")
+    do {
+        _ = try TiboResetForecastReader.read(
+            forecast: forecastData, timeline: timelineData(events), now: now.addingTimeInterval(10_800)
+        )
+        throw CheckFailure.failed("stale Tibo forecast was shown")
+    } catch TiboResetForecastReader.DataError.staleResponse {
+        // Expected: a delayed public feed cannot be presented as current.
+    }
 }
 
 @main
@@ -155,6 +238,35 @@ struct CoreChecks {
             L10n.string("show_five_hour_usage", language: .simplifiedChinese) == "显示 5 小时用量",
             "Simplified Chinese five-hour setting label"
         )
+        try testTiboForecastReader()
+
+        let credential = try testCredential()
+        let subscription = SubscriptionSnapshotReader.read(
+            credential: credential, expectedAccountID: "account-a", expectedEmail: "a@example.com"
+        )
+        let iso = ISO8601DateFormatter()
+        try require(subscription?.activeUntil == iso.date(from: "2026-10-17T12:00:00Z"), "saved subscription date")
+        try require(subscription?.lastChecked == iso.date(from: "2026-10-03T12:00:00Z"), "saved subscription check time")
+        try require(SubscriptionSnapshotReader.read(
+            credential: credential, expectedAccountID: "other-account", expectedEmail: "a@example.com"
+        ) == nil, "subscription cannot cross account IDs")
+        try require(SubscriptionSnapshotReader.read(
+            credential: credential, expectedAccountID: "account-a", expectedEmail: "other@example.com"
+        ) == nil, "subscription cannot cross emails")
+        try require(SubscriptionSnapshotReader.read(
+            credential: credential, expectedAccountID: nil, expectedEmail: "A@EXAMPLE.COM"
+        ) == subscription, "email-only saved profiles identify their own subscription")
+        let freeCredential = try testCredential(plan: "free")
+        try require(SubscriptionSnapshotReader.read(
+            credential: freeCredential, expectedAccountID: "account-a", expectedEmail: nil
+        ) == nil, "free login has no membership date")
+        let missingDateCredential = try testCredential(activeUntil: nil)
+        try require(SubscriptionSnapshotReader.read(
+            credential: missingDateCredential, expectedAccountID: "account-a", expectedEmail: nil
+        ) == nil, "missing subscription date stays unknown")
+        try require(SubscriptionSnapshotReader.read(
+            credential: Data("invalid".utf8), expectedAccountID: "account-a", expectedEmail: nil
+        ) == nil, "invalid credential stays unknown")
 
         let fileManager = FileManager.default
         let root = fileManager.temporaryDirectory.appending(path: "switcher-check-\(UUID().uuidString)")
@@ -163,6 +275,58 @@ struct CoreChecks {
         let support = root.appending(path: "support")
         try fileManager.createDirectory(at: activeHome, withIntermediateDirectories: true)
         try Data(#"{"tokens":{"account_id":"first"}}"#.utf8).write(to: activeHome.appending(path: "auth.json"))
+
+        let subscriptionHome = root.appending(path: "subscription-active")
+        let subscriptionStore = AccountStore(
+            baseURL: root.appending(path: "subscription-support"), activeHomeURL: subscriptionHome
+        )
+        let subscriptionProfile = AccountProfile(
+            id: UUID(), displayName: "A", email: "a@example.com",
+            accountID: nil, createdAt: Date(), lastUsedAt: nil
+        )
+        let savedHome = await subscriptionStore.profileHome(id: subscriptionProfile.id)
+        try fileManager.createDirectory(at: savedHome, withIntermediateDirectories: true)
+        try fileManager.createDirectory(at: subscriptionHome, withIntermediateDirectories: true)
+        try credential.write(to: savedHome.appending(path: "auth.json"))
+        let newerCredential = try testCredential(
+            activeUntil: "2026-10-24T12:00:00Z", lastChecked: "2026-10-04T12:00:00Z"
+        )
+        try newerCredential.write(to: subscriptionHome.appending(path: "auth.json"))
+        let inactiveDate = await subscriptionStore.readSubscriptionSnapshot(profile: subscriptionProfile, isActive: false)
+        let activeDate = await subscriptionStore.readSubscriptionSnapshot(profile: subscriptionProfile, isActive: true)
+        try require(inactiveDate == subscription, "inactive profile uses its saved login")
+        try require(activeDate?.activeUntil == iso.date(from: "2026-10-24T12:00:00Z"),
+                    "active profile uses the newer current login")
+
+        let migrationHome = root.appending(path: "migration-active")
+        let migrationSupport = root.appending(path: "migration-support")
+        try fileManager.createDirectory(at: migrationHome, withIntermediateDirectories: true)
+        try credential.write(to: migrationHome.appending(path: "auth.json"))
+        let migrationProfile = AccountProfile(
+            id: UUID(), displayName: "A", email: "a@example.com",
+            accountID: nil, createdAt: Date(), lastUsedAt: nil
+        )
+        let migrationStore = AccountStore(baseURL: migrationSupport, activeHomeURL: migrationHome)
+        try await migrationStore.importCurrentProfile(migrationProfile)
+        let reloadedMigrationStore = AccountStore(baseURL: migrationSupport, activeHomeURL: migrationHome)
+        let migrated = try await reloadedMigrationStore.loadRegistry()
+        try require(migrated.accounts.first?.accountID == "account-a", "legacy profile gains its saved account ID")
+        try newerCredential.write(to: migrationHome.appending(path: "auth.json"))
+        let synced = try await reloadedMigrationStore.syncActiveCredential()
+        try require(synced.activeAccountID == migrationProfile.id,
+                    "matching active credential refreshes the saved profile")
+        let migratedHome = await reloadedMigrationStore.profileHome(id: migrationProfile.id)
+        let savedAfterSync = try Data(contentsOf: migratedHome.appending(path: "auth.json"))
+        try require(savedAfterSync == newerCredential,
+                    "saved profile receives the refreshed credential")
+        let wrongAccountCredential = try testCredential(accountID: "other-account")
+        try wrongAccountCredential.write(to: migrationHome.appending(path: "auth.json"))
+        let externalLogin = try await reloadedMigrationStore.syncActiveCredential()
+        try require(externalLogin.activeAccountID != migrationProfile.id && externalLogin.accounts.count == 2,
+                    "external login becomes active in its own profile")
+        let savedAfterRejectedSync = try Data(contentsOf: migratedHome.appending(path: "auth.json"))
+        try require(savedAfterRejectedSync == newerCredential,
+                    "external login leaves the previous profile intact")
 
         let store = AccountStore(baseURL: support, activeHomeURL: activeHome)
         let first = AccountProfile(
@@ -234,6 +398,10 @@ struct CoreChecks {
         try require(
             !legacySettings.showsFiveHourUsage,
             "legacy settings hide five-hour usage"
+        )
+        try require(
+            legacySettings.statusBarUsageWindow == .fiveHour,
+            "legacy settings default to the five-hour status bar window"
         )
         let hiddenPercentageSettings = AppSettings(
             language: .simplifiedChinese,
@@ -308,6 +476,7 @@ struct CoreChecks {
         let identity = try await client.readIdentity(profileHome: root)
         try require(identity.accountID == "acct-123", "JSONL account handshake")
 
+        try await store.activateTargetCredential(id: first.id)
         let appModel = AppModel(
             store: store,
             codex: client,
@@ -320,6 +489,10 @@ struct CoreChecks {
         try require(
             appModel.usageStates[first.id] == .loaded(cachedWeekly),
             "cached usage is visible at startup"
+        )
+        try require(
+            appModel.activeRemainingPercent == 73,
+            "five-hour status bar falls back to weekly-only cached usage"
         )
         let changesBeforeSettings = modelChangeCount
         await appModel.setShowsFiveHourUsage(false)
@@ -335,7 +508,6 @@ struct CoreChecks {
         )
         await appModel.waitForWeeklyUsageRefresh()
         try require(modelChangeCount > changesBeforeSettings + 1, "shared-core usage refresh notifies the macOS interface")
-        modelObservation.cancel()
         try require(
             appModel.usageStates[first.id]?.displayedUsage?.remainingPercent == 42,
             "refresh replaces displayed cached usage"
@@ -345,9 +517,27 @@ struct CoreChecks {
             "hidden five-hour usage is still normalized"
         )
         try require(
-            appModel.activeRemainingPercent == 42,
-            "menu-bar percentage remains weekly"
+            appModel.activeRemainingPercent == 20,
+            "default status bar shows 100 minus the fixture's five-hour usedPercent of 80"
         )
+        await appModel.setShowsFiveHourUsage(true)
+        try require(
+            appModel.activeRemainingPercent == 20,
+            "account-row five-hour visibility does not change the selected status bar window"
+        )
+        let changesBeforeWindow = modelChangeCount
+        await appModel.setStatusBarUsageWindow(.weekly)
+        try require(modelChangeCount > changesBeforeWindow, "status bar window notifies the macOS interface")
+        try require(
+            appModel.activeRemainingPercent == 42,
+            "weekly status bar shows 100 minus the fixture's weekly usedPercent of 58"
+        )
+        await appModel.setStatusBarUsageWindow(.fiveHour)
+        try require(
+            appModel.activeRemainingPercent == 20,
+            "switching back to five-hour status bar restores its remaining percentage"
+        )
+        modelObservation.cancel()
         let refreshedCache = try await store.loadUsageCache()
         try require(
             refreshedCache.entries.first(where: { $0.profileID == first.id })?.usage.remainingPercent == 42,
@@ -497,7 +687,8 @@ struct CoreChecks {
             .filter { $0.hasPrefix("usage-cache.json.switcher-") }
         try require(cacheTemporaryFiles.isEmpty, "failed cache replacement removes temporary file")
 
-        try require(!appModel.activeIdentityConfirmed, "precondition identity mismatch")
+        try require(appModel.activeIdentityConfirmed && appModel.activeAccountID == first.id,
+                    "local credential determines the current account despite unrelated RPC identity")
         await appModel.switchAccount(to: second.id)
         try require(appModel.activeAccountID == second.id, "reopen failure active account reload")
         try require(appModel.activeIdentityConfirmed, "reopen failure identity state")

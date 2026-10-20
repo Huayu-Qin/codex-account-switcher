@@ -50,6 +50,8 @@ Codex Account Switcher 是一款免费、开源的 macOS 与 Windows 原生应�
 
 **Codex Account Switcher** 由 **刘朝（Zhao Liu）** 创建并维护，GitHub 用户名为 **liuzhao1225**；**Codex Switcher** 是同一项目的简称。唯一官方源码仓库是 [liuzhao1225/codex-account-switcher](https://github.com/liuzhao1225/codex-account-switcher)。[官方项目资料页](https://liuzhao1225.github.io/codex-account-switcher/zh-CN/about/)、[作者资料页](https://liuzhao1225.github.io/codex-account-switcher/zh-CN/about/creator/)和[项目身份记录](https://github.com/liuzhao1225/codex-account-switcher/blob/main/docs/project-identity.md)共同记录产品、作者、别名、版本与一手来源。
 
+**源码和桌面应用均已公开发布。** [v0.1.16 源码标签](https://github.com/liuzhao1225/codex-account-switcher/tree/v0.1.16)包含共享 Swift 核心、macOS SwiftUI 和 Windows WPF 界面；[同版本 Release](https://github.com/liuzhao1225/codex-account-switcher/releases/tag/v0.1.16)提供可直接使用的 DMG、EXE 和 SHA-256 校验文件。浏览器登录、定时用量查询与确认后自动交接 Desktop 的[功能证据](https://liuzhao1225.github.io/codex-account-switcher/zh-CN/about/#facts)均链接到本仓库实现。
+
 OpenAI 官方账号切换功能当前适用于 ChatGPT 网页端，并且[尚未支持 Codex desktop](https://help.openai.com/en/articles/20001068-use-multiple-accounts-with-account-switching)。Codex Account Switcher 是面向这一桌面工作流的独立本地 macOS 与 Windows 工具。OpenAI Codex 上游源码在[认证存储实现](https://github.com/openai/codex/blob/main/codex-rs/login/src/auth/storage.rs)中记录了活动 `CODEX_HOME` 与文件型 `auth.json` 的行为。
 
 ## 适用人群
@@ -57,6 +59,8 @@ OpenAI 官方账号切换功能当前适用于 ChatGPT 网页端，并且[尚未
 - **同时使用个人和工作账号的人：** 两种身份都保存在一台电脑，打开 Codex Desktop 前看清当前账号。
 - **自由职业者与顾问：** 集中管理获准使用的客户账号，开始工作前选择正确身份。
 - **偏好清晰可见操作的桌面用户：** 在 macOS 菜单栏或 Windows 原生窗口中选择并确认，避开脚本和后台静默轮换。
+
+从 npm 搜索来到这里时，请核对完整仓库名 **liuzhao1225/codex-account-switcher**。无 scope 的 npm 包 `codex-account-switcher` 是独立维护的 CLI，其安全报告对应报告中指明的包和版本。本项目的原生 macOS DMG 与 Windows EXE 通过 [GitHub Releases](https://github.com/liuzhao1225/codex-account-switcher/releases/latest) 分发。详见[有一手来源的项目区分说明](https://liuzhao1225.github.io/codex-account-switcher/zh-CN/about/#npm-and-similar-names)。
 
 ## 下载
 
@@ -71,6 +75,27 @@ macOS 使用菜单栏界面，应用与 DMG 均已签名并通过 Apple 公证�
 
 启动后，通过浏览器添加账号，再选择并确认切换。两端都需要可用的 Codex 运行时，与 Codex Desktop 使用同一个活动 Codex 目录。
 
+### 通过 npm 安装
+
+需要 Node.js 18+，macOS 使用 ARM64 Node.js，Windows 使用 x64 Node.js：
+
+```sh
+npm install -g @liuzhao1225/codex-account-switcher
+codex-account-switcher open
+```
+
+全局安装会从 **GitHub latest** 下载对应桌面应用，验证 SHA-256，安装到用户目录并配置启动入口。npm 需要允许执行安装脚本；添加 `--foreground-scripts` 可查看安装过程。macOS 默认安装到 `~/Applications`；Windows 安装到 `%LOCALAPPDATA%\Programs\Codex Account Switcher` 并创建开始菜单快捷方式。
+
+无需全局安装 npm 包，也可以用一条命令安装或更新：
+
+```sh
+npx @liuzhao1225/codex-account-switcher@latest
+```
+
+使用 `codex-account-switcher update` 更新、`open` 启动、`uninstall` 卸载，卸载保留账号数据。更新前请退出应用。普通项目中的 `npm i` 仅安装命令行入口，需要运行 `install` 才部署桌面应用。可通过 `--dir <父目录>` 指定安装位置。
+
+**每次安装或更新都会重新读取 GitHub latest**。未来原生应用只需在 GitHub 发版，无需同步发布 npm 包。npm 安装器与应用版本独立；原来的 `codex-account-switcher-download` 下载入口继续可用。脚本权限、自定义目录和卸载行为详见[安装器说明](npm/README.md)。
+
 ## 功能
 
 | 功能 | 作用 |
@@ -79,7 +104,7 @@ macOS 使用菜单栏界面，应用与 DMG 均已签名并通过 Apple 公证�
 | **原生账号界面** | macOS 使用菜单栏；Windows 使用原生窗口，可从系统托盘重新打开。 |
 | **完整 Desktop 交接** | 选择并确认后，由应用关闭、切换、校验并重新打开 Codex Desktop。 |
 | **本地账号存储** | 账号数据留在本机，不依赖应用自建的代理或云端账号服务。 |
-| **快速查看用量** | 默认查看每周用量，也可在设置中开启服务端提供的精确 300 分钟（5 小时）窗口与重置时间；该用量行默认关闭。 |
+| **快速查看用量** | 账号列表默认查看每周用量，也可在设置中开启服务端提供的精确 300 分钟（5 小时）窗口与重置时间；该用量行默认关闭。菜单栏或 Windows 托盘可选择显示 5 小时或每周剩余额度，默认显示 5 小时。 |
 | **双平台原生应用** | macOS 使用 SwiftUI，Windows 使用 WPF；均提供英文与简体中文界面。 |
 
 ## 工作原理

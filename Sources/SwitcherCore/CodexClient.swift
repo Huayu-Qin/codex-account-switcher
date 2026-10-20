@@ -70,7 +70,7 @@ private final class LinePump: @unchecked Sendable {
     private let lock = NSLock()
     private var buffer = Data()
     private var lines: [Data] = []
-    private var waiters: [CheckedContinuation<Data?, any Error>] = []
+    private var waiters: [CheckedContinuation<Data?, Never>] = []
     private var isFinished = false
 
     public init(handle: FileHandle) {
@@ -100,8 +100,8 @@ private final class LinePump: @unchecked Sendable {
         }
     }
 
-    public func next() async throws -> Data? {
-        try await withCheckedThrowingContinuation { continuation in
+    public func next() async -> Data? {
+        await withCheckedContinuation { continuation in
             lock.lock()
             if !lines.isEmpty {
                 let line = lines.removeFirst()
@@ -307,7 +307,7 @@ private actor JSONRPCSession {
         }
         defer { timeoutTask.cancel() }
 
-        while let line = try await pump.next() {
+        while let line = await pump.next() {
             let message: RPCEnvelope
             do {
                 message = try decoder.decode(RPCEnvelope.self, from: line)
@@ -335,11 +335,7 @@ private actor JSONRPCSession {
 
     private func triggerTimeout() {
         didTimeout = true
-        output.readabilityHandler = nil
-        errorOutput.readabilityHandler = nil
-        if process.isRunning { process.terminate() }
-        pump.finish()
-        stderrDrain.finish()
+        stop()
     }
 
     private func send(_ object: [String: Any]) throws {
@@ -483,7 +479,7 @@ public struct CodexClient: AccountClient {
     private let openBrowser: @Sendable (URL) async throws -> Void
 
     public init(locator: CodexExecutableLocator = .init(), requestTimeout: Duration = .seconds(20),
-                clientVersion: String = "0.1.16",
+                clientVersion: String = "0.1.20",
                 openBrowser: @escaping @Sendable (URL) async throws -> Void = CodexClient.defaultOpenBrowser) {
         self.locator = locator
         self.requestTimeout = requestTimeout
@@ -521,57 +517,48 @@ public struct CodexClient: AccountClient {
                 timeout: requestTimeout
             )
         }
-        return try WeeklyUsageNormalizer.normalize(parseWindows(result))
+        let availableCount = result["rateLimitResetCredits"]?["availableCount"]?.intValue
+        return try WeeklyUsageNormalizer.normalize(
+            parseWindows(result),
+            resetCreditsRemaining: availableCount.flatMap { $0 >= 0 ? $0 : nil }
+        )
     }
 
     public func login(profileHome: URL) async throws -> AccountIdentity {
-        let launch = try locator.launchConfiguration()
-        let session = try JSONRPCSession(executableURL: launch.executable, profileHome: profileHome, environment: launch.environment)
-        return try await withTaskCancellationHandler {
-            do {
-                try await session.initialize(timeout: requestTimeout, clientVersion: clientVersion)
-                let start = try await session.request(
-                    method: "account/login/start",
-                    id: 1,
-                    params: [
-                        "type": "chatgpt",
-                        "useHostedLoginSuccessPage": true,
-                        "appBrand": "codex",
-                    ],
-                    timeout: requestTimeout
-                )
-                guard let authURLString = start["authUrl"]?.stringValue,
-                      let authURL = URL(string: authURLString)
-                else {
-                    throw CodexClientError.malformedResponse
-                }
-                try await openBrowser(authURL)
-
-                let completion = try await session.notification(
-                    method: "account/login/completed",
-                    timeout: .seconds(600)
-                )
-                guard completion["success"]?.boolValue == true else {
-                    throw CodexClientError.loginFailed(
-                        completion["error"]?.stringValue ?? "The sign-in did not complete."
-                    )
-                }
-                let identityValue = try await session.request(
-                    method: "account/read",
-                    id: 2,
-                    params: ["refreshToken": false],
-                    timeout: requestTimeout
-                )
-                let identity = try parseIdentity(identityValue, profileHome: profileHome)
-                await session.stop()
-                return identity
-            } catch {
-                await session.stop()
-                if Task.isCancelled { throw CancellationError() }
-                throw error
+        try await withSession(profileHome: profileHome) { session in
+            let start = try await session.request(
+                method: "account/login/start",
+                id: 1,
+                params: [
+                    "type": "chatgpt",
+                    "useHostedLoginSuccessPage": true,
+                    "appBrand": "codex",
+                ],
+                timeout: requestTimeout
+            )
+            guard let authURLString = start["authUrl"]?.stringValue,
+                  let authURL = URL(string: authURLString)
+            else {
+                throw CodexClientError.malformedResponse
             }
-        } onCancel: {
-            Task { await session.stop() }
+            try await openBrowser(authURL)
+
+            let completion = try await session.notification(
+                method: "account/login/completed",
+                timeout: .seconds(600)
+            )
+            guard completion["success"]?.boolValue == true else {
+                throw CodexClientError.loginFailed(
+                    completion["error"]?.stringValue ?? "The sign-in did not complete."
+                )
+            }
+            let identityValue = try await session.request(
+                method: "account/read",
+                id: 2,
+                params: ["refreshToken": false],
+                timeout: requestTimeout
+            )
+            return try parseIdentity(identityValue, profileHome: profileHome)
         }
     }
 

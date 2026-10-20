@@ -25,6 +25,12 @@ function validDate(value) {
 
 function checkTarget(href, sourceURL, label) {
   const url = new URL(href, sourceURL);
+  const repositoryPrefix = "https://github.com/liuzhao1225/codex-account-switcher/blob/main/";
+  if (url.href.startsWith(repositoryPrefix)) {
+    const relative = decodeURIComponent(url.pathname.split("/blob/main/")[1]);
+    if (!fs.existsSync(path.join(root, relative))) fail(`${label}: missing repository source ${relative}`);
+    return;
+  }
   if (!url.href.startsWith(baseURL)) return;
   const target = siteFileForURL(url.href);
   if (!target || !fs.existsSync(target)) {
@@ -90,6 +96,10 @@ for (const file of htmlFiles) {
   const localPath = path.relative(siteRoot, path.dirname(file)).split(path.sep).join("/");
   const expectedURL = `${baseURL}${localPath ? `${localPath}/` : ""}`;
   const language = html.match(/<html\s+lang=["']([^"']+)["']/i)?.[1];
+  if (localPath === "privacy" || localPath === "zh-CN/privacy") {
+    const visibleVersion = language === "zh-CN" ? `适用于 v${releaseVersion}` : `Applies to v${releaseVersion}`;
+    if (!html.includes(visibleVersion)) fail(`${relative}: visible privacy release differs from CITATION.cff`);
+  }
   const alternates = Object.fromEntries([...html.matchAll(/<link\s+rel="alternate"\s+hreflang="([^"]+)"\s+href="([^"]+)"/g)].map((match) => [match[1], match[2]]));
   const ogURL = matchOne(html, /<meta\s+property="og:url"\s+content="([^"]+)"[^>]*>/g, "Open Graph URL", relative);
 
@@ -215,6 +225,8 @@ for (const url of sitemapURLs) {
 }
 
 const llms = fs.readFileSync(path.join(siteRoot, "llms.txt"), "utf8");
+const identity = fs.readFileSync(path.join(root, "docs/project-identity.md"), "utf8");
+if (!identity.includes(`| Current release | [v${releaseVersion}]`)) fail("docs/project-identity.md: current release differs from CITATION.cff");
 if (!/^# Codex Account Switcher\r?\n/.test(llms)) fail("site/llms.txt: must start with the canonical project H1");
 if (!llms.includes("> Codex Account Switcher is")) fail("site/llms.txt: missing concise project summary");
 if (!llms.includes(`current release is v${releaseVersion}`)) fail("site/llms.txt: current release differs from CITATION.cff");

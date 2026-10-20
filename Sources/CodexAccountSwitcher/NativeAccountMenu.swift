@@ -6,7 +6,8 @@ import SwitcherCore
 struct NativeAccountMenu: View {
     @ObservedObject var model: AppModel
     @ObservedObject var updater: AppUpdater
-    @Environment(\.openWindow) private var openWindow
+    let onManage: () -> Void
+    let onSettings: () -> Void
 
     var body: some View {
         Text("Codex Account Switcher")
@@ -25,10 +26,10 @@ struct NativeAccountMenu: View {
             .disabled(model.isMutating || updater.isInstalling)
         }
         Divider()
-        Button(model.text("manage") + "…") { showWindow("accounts") }
+        Button(model.text("manage") + "…") { onManage() }
             .keyboardShortcut("m", modifiers: .command)
             .disabled(model.isMutating || updater.isInstalling)
-        Button(model.text("settings") + "…") { showWindow("settings") }
+        Button(model.text("settings") + "…") { onSettings() }
             .keyboardShortcut(",", modifiers: .command)
         if let error = model.visibleError {
             Divider()
@@ -65,11 +66,6 @@ struct NativeAccountMenu: View {
         return title
     }
 
-    private func showWindow(_ id: String) {
-        openWindow(id: id)
-        NSApp.activate(ignoringOtherApps: true)
-    }
-
     private func confirmSwitch(_ account: AccountProfile) {
         guard account.id != model.activeAccountID, !model.isMutating, !updater.isInstalling else { return }
         let alert = NSAlert()
@@ -87,7 +83,7 @@ struct AccountUtilityWindow: View {
     @ObservedObject var model: AppModel
     @ObservedObject var updater: AppUpdater
     let settings: Bool
-    @Environment(\.dismiss) private var dismiss
+    let onClose: () -> Void
 
     var body: some View {
         ScrollView {
@@ -103,9 +99,9 @@ struct AccountUtilityWindow: View {
                     Divider()
                 }
                 if settings {
-                    SettingsView(model: model, updater: updater, showsHeader: false) { dismiss() }
+                    SettingsView(model: model, updater: updater, showsHeader: false, onBack: onClose)
                 } else {
-                    ManageAccountsView(model: model, showsHeader: false) { dismiss() }
+                    ManageAccountsView(model: model, showsHeader: false, onBack: onClose)
                         .disabled(updater.isInstalling)
                 }
             }

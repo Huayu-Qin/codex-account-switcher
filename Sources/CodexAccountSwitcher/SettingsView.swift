@@ -45,6 +45,19 @@ struct SettingsView: View {
                 ))
             }
             rowDivider
+            settingRow("status_bar_usage_window") {
+                Picker(model.text("status_bar_usage_window"), selection: Binding(
+                    get: { model.settings.statusBarUsageWindow },
+                    set: { window in Task { await model.setStatusBarUsageWindow(window) } }
+                )) {
+                    Text(model.text("five_hour")).tag(StatusBarUsageWindow.fiveHour)
+                    Text(model.text("weekly")).tag(StatusBarUsageWindow.weekly)
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .fixedSize()
+            }
+            rowDivider
             settingRow("show_five_hour_usage") {
                 settingSwitch("show_five_hour_usage", isOn: Binding(
                     get: { model.settings.showsFiveHourUsage },

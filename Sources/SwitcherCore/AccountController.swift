@@ -11,6 +11,7 @@ open class AccountController {
     public private(set) var accounts: [AccountProfile] = [] { didSet { onChange?() } }
     public private(set) var activeAccountID: UUID? { didSet { onChange?() } }
     public private(set) var usageStates: [UUID: UsageViewState] = [:] { didSet { onChange?() } }
+    public private(set) var subscriptionSnapshots: [UUID: SubscriptionSnapshot] = [:] { didSet { onChange?() } }
     public private(set) var settings: AppSettings = .default { didSet { onChange?() } }
     public private(set) var isMutating = false { didSet { onChange?() } }
     public private(set) var isAddingAccount = false { didSet { onChange?() } }
@@ -47,7 +48,10 @@ open class AccountController {
 
     public var activeRemainingPercent: Int? {
         guard let activeAccountID else { return nil }
-        return usageStates[activeAccountID]?.displayedUsage?.remainingPercent
+        guard let usage = usageStates[activeAccountID]?.displayedUsage else { return nil }
+        return settings.statusBarUsageWindow == .fiveHour
+            ? (usage.fiveHourRemainingPercent ?? usage.remainingPercent)
+            : usage.remainingPercent
     }
 
     public var activeFiveHourRemainingPercent: Int? {
@@ -76,28 +80,14 @@ open class AccountController {
         defer { isMutating = false }
         do {
             settings = try await store.loadSettings()
-            var registry = try await store.loadRegistry()
-            if registry.accounts.isEmpty, await store.activeCredentialExists() {
-                let activeHome = await store.activeCodexHome()
-                let identity = try await codex.readIdentity(profileHome: activeHome)
-                let profile = AccountProfile(
-                    id: UUID(),
-                    displayName: identity.suggestedDisplayName,
-                    email: identity.email,
-                    accountID: identity.accountID,
-                    createdAt: Date(),
-                    lastUsedAt: Date()
-                )
-                try await store.importCurrentProfile(profile)
-                registry = try await store.loadRegistry()
-            }
-            apply(registry)
+            apply(try await store.loadRegistry())
+            try await syncActiveIdentity()
+            await refreshSubscriptionSnapshots()
             do {
                 apply(try await store.loadUsageCache())
             } catch {
                 showError(error)
             }
-            await confirmActiveIdentity()
         } catch {
             showError(error)
         }
@@ -107,7 +97,7 @@ open class AccountController {
         if isBackgroundUsageRefreshEnabled {
             scheduleNextWeeklyUsageRefresh()
         }
-        guard !isMutating, !accounts.isEmpty, usageRefreshTask == nil else { return }
+        guard !isMutating, usageRefreshTask == nil else { return }
         usageRefreshTask = Task { [weak self] in
             guard let self else { return }
             await self.performWeeklyUsageRefresh()
@@ -117,6 +107,18 @@ open class AccountController {
 
     public func waitForWeeklyUsageRefresh() async {
         await usageRefreshTask?.value
+    }
+
+    private func refreshSubscriptionSnapshots() async {
+        var snapshots: [UUID: SubscriptionSnapshot] = [:]
+        for account in accounts {
+            if let snapshot = await store.readSubscriptionSnapshot(
+                profile: account, isActive: account.id == activeAccountID
+            ) {
+                snapshots[account.id] = snapshot
+            }
+        }
+        subscriptionSnapshots = snapshots
     }
 
     public func startBackgroundUsageRefresh(every interval: Duration = .seconds(300)) async {
@@ -149,37 +151,23 @@ open class AccountController {
 
     private func performWeeklyUsageRefresh() async {
         guard !Task.isCancelled else { return }
-        if let id = activeAccountID {
-            do {
-                let matches = try await store.syncActiveCredentialIfMatching(id: id)
-                guard !Task.isCancelled else { return }
-                activeIdentityConfirmed = matches
-            } catch {
-                guard !Task.isCancelled else { return }
-                activeIdentityConfirmed = false
-                showError(error)
-                return
-            }
+        do {
+            try await syncActiveIdentity()
+        } catch {
+            showError(error)
+            return
         }
-        let targets = await withTaskGroup(of: (UUID, URL).self, returning: [(UUID, URL)].self) { group in
-            for account in accounts {
-                group.addTask { [store] in
-                    (account.id, await store.profileHome(id: account.id))
-                }
-            }
-            var values: [(UUID, URL)] = []
-            for await value in group { values.append(value) }
-            return values
-        }
-
         guard !Task.isCancelled else { return }
+        await refreshSubscriptionSnapshots()
         await withTaskGroup(of: UsageRefreshResult.self) { group in
-            for (id, home) in targets {
-                group.addTask { [codex] in
+            for account in accounts {
+                group.addTask { [store, codex] in
                     do {
-                        return .success(id, try await codex.readWeeklyUsage(profileHome: home))
+                        let home = await store.profileHome(id: account.id)
+                        try Task.checkCancellation()
+                        return .success(account.id, try await codex.readWeeklyUsage(profileHome: home))
                     } catch {
-                        return .failure(id, error.localizedDescription)
+                        return .failure(account.id, error.localizedDescription)
                     }
                 }
             }
@@ -207,13 +195,16 @@ open class AccountController {
     }
 
     public func switchAccount(to id: UUID) async {
-        guard id != activeAccountID, !isMutating else { return }
+        guard !isMutating else { return }
         isMutating = true
         await cancelUsageRefresh()
         defer { isMutating = false; refreshWeeklyUsage() }
         do {
+            try await syncActiveIdentity()
+            guard id != activeAccountID else { return }
             try await switchService.switchAccount(to: id)
             apply(try await store.loadRegistry())
+            await refreshSubscriptionSnapshots()
             activeIdentityConfirmed = true
         } catch let error as OperationError {
             if error.stage == .reopenDesktop {
@@ -273,6 +264,7 @@ open class AccountController {
             )
             try await store.addProfile(profile)
             apply(try await store.loadRegistry())
+            await refreshSubscriptionSnapshots()
         } catch {
             let loginError = error
             do {
@@ -296,6 +288,7 @@ open class AccountController {
             let identity = try await codex.readIdentity(profileHome: await store.activeCodexHome())
             try await store.registerActiveIdentity(identity)
             apply(try await store.loadRegistry())
+            await refreshSubscriptionSnapshots()
             activeIdentityConfirmed = true
             visibleError = nil
         } catch { showError(error) }
@@ -307,6 +300,7 @@ open class AccountController {
         await cancelUsageRefresh()
         defer { isMutating = false; refreshWeeklyUsage() }
         do {
+            try await syncActiveIdentity()
             try await store.removeAccount(id: id)
             apply(try await store.loadRegistry())
             usageStates[id] = nil
@@ -342,6 +336,15 @@ open class AccountController {
         }
     }
 
+    public func setStatusBarUsageWindow(_ window: StatusBarUsageWindow) async {
+        settings.statusBarUsageWindow = window
+        do {
+            try await store.saveSettings(settings)
+        } catch {
+            showError(error)
+        }
+    }
+
     public func dismissError() {
         visibleError = nil
     }
@@ -355,6 +358,7 @@ open class AccountController {
         accounts = registry.accounts
         activeAccountID = registry.activeAccountID
         usageStates = usageStates.filter { id, _ in registry.accounts.contains(where: { $0.id == id }) }
+        subscriptionSnapshots = subscriptionSnapshots.filter { id, _ in registry.accounts.contains(where: { $0.id == id }) }
     }
 
     private func apply(_ cache: UsageCache) {
@@ -364,15 +368,14 @@ open class AccountController {
         }
     }
 
-    private func confirmActiveIdentity() async {
-        guard let activeID = activeAccountID,
-              let profile = accounts.first(where: { $0.id == activeID })
-        else { return }
+    private func syncActiveIdentity() async throws {
         do {
-            let identity = try await codex.readIdentity(profileHome: await store.activeCodexHome())
-            activeIdentityConfirmed = identity.matches(profile)
+            apply(try await store.syncActiveCredential())
+            activeIdentityConfirmed = activeAccountID != nil || accounts.isEmpty
         } catch {
+            activeAccountID = nil
             activeIdentityConfirmed = false
+            throw error
         }
     }
 

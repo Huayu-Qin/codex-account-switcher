@@ -31,6 +31,7 @@ public partial class App : Application
     private Icon? icon;
     private string? trayIconVariant;
     private System.Drawing.Size trayIconSize;
+    private int? trayIconPercent;
     private CoreClient? client;
     private MainWindow? window;
     private DispatcherTimer? updates;
@@ -88,9 +89,19 @@ public partial class App : Application
         if (client == null || tray == null) return;
         RefreshTrayIcon();
         var active = client.State.Accounts.FirstOrDefault(row => row.Profile.Id == client.State.ActiveAccountID);
-        var percent = client.State.Settings.ShowsMenuBarPercentage ? active?.Usage?.RemainingPercent : null;
+        var percent = ActiveTrayPercent();
         var label = active == null ? "Codex Account Switcher" : active.Profile.DisplayName + (percent != null ? " · " + percent + "%" : "");
         tray.Text = label.Length > 63 ? label[..63] : label;
+    }
+    private int? ActiveTrayPercent()
+    {
+        if (client?.State.Settings.ShowsMenuBarPercentage != true) return null;
+        var state = client.State;
+        var usage = state.Accounts.FirstOrDefault(row => row.Profile.Id == state.ActiveAccountID)?.Usage;
+        if (usage == null) return null;
+        return state.Settings.StatusBarUsageWindow == "fiveHour"
+            ? usage.FiveHourRemainingPercent ?? usage.RemainingPercent
+            : usage.RemainingPercent;
     }
     private void RefreshTrayIcon()
     {
@@ -99,14 +110,20 @@ public partial class App : Application
         // Taskbar appearance can differ from the application's light/dark theme.
         var variant = key?.GetValue("SystemUsesLightTheme") is int light && light != 0 ? "light" : "dark";
         var size = Forms.SystemInformation.SmallIconSize;
-        if (trayIconVariant == variant && trayIconSize == size) return;
-        var uri = new Uri($"pack://application:,,,/Codex-Account-Switcher-windows-x64;component/tray-{variant}.ico");
-        using var resource = GetResourceStream(uri).Stream;
-        using var original = new Icon(resource, size);
-        var replacement = (Icon)original.Clone();
+        var percent = ActiveTrayPercent();
+        if (trayIconVariant == variant && trayIconSize == size && trayIconPercent == percent) return;
+        Icon replacement;
+        if (percent is { } value) {
+            replacement = TrayUsageIcon.Create(value, variant == "light", size);
+        } else {
+            var uri = new Uri($"pack://application:,,,/Codex-Account-Switcher-windows-x64;component/tray-{variant}.ico");
+            using var resource = GetResourceStream(uri).Stream;
+            using var original = new Icon(resource, size);
+            replacement = (Icon)original.Clone();
+        }
         tray.Icon = replacement;
         icon?.Dispose(); icon = replacement;
-        trayIconVariant = variant; trayIconSize = size;
+        trayIconVariant = variant; trayIconSize = size; trayIconPercent = percent;
     }
     private void OnUserPreferenceChanged(object sender, UserPreferenceChangedEventArgs e)
     {

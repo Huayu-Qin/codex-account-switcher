@@ -4,62 +4,49 @@ import SwiftUI
 
 @main
 struct SwitcherApp: App {
-    @StateObject private var model = AppModel.live()
-    @StateObject private var updater = AppUpdater()
+    @NSApplicationDelegateAdaptor(SwitcherAppDelegate.self) private var appDelegate
 
     var body: some Scene {
         MenuBarExtra {
-            NativeAccountMenu(model: model, updater: updater)
+            NativeAccountMenu(model: appDelegate.model, updater: appDelegate.updater,
+                              onManage: appDelegate.showAccounts, onSettings: appDelegate.showSettings)
         } label: {
-            HStack(spacing: 4) {
-                MenuBarLogo()
-                    .overlay(alignment: .topTrailing) {
-                        if updater.availableVersion != nil {
-                            Circle().fill(.blue).frame(width: 5, height: 5)
-                                .offset(x: 2, y: -1)
-                        }
-                    }
-                Text(verbatim: menuBarTitle)
-                    .monospacedDigit()
-
-            }
-                .accessibilityElement(children: .combine)
-                .accessibilityLabel(menuBarAccessibilityLabel)
-                .task {
-                    updater.start()
-                    await model.start()
-                    model.refreshWeeklyUsage()
-                    await model.startBackgroundUsageRefresh()
-                }
-                .onChange(of: model.isMutating || model.isAddingAccount) { _, busy in
-                    updater.accountOperationInProgress = busy
-                }
+            MenuBarStatusLabel(model: appDelegate.model, updater: appDelegate.updater)
         }
         .menuBarExtraStyle(.menu)
         .commands {
-            QuitApplicationCommands(title: model.text("quit"))
+            QuitApplicationCommands(model: appDelegate.model)
         }
 
-        Window("Manage Accounts", id: "accounts") {
-            AccountUtilityWindow(model: model, updater: updater, settings: false)
-        }
-        .defaultSize(width: 440, height: 520)
-        .windowResizability(.contentMinSize)
+    }
+}
 
-        Window("Settings", id: "settings") {
-            AccountUtilityWindow(model: model, updater: updater, settings: true)
+private struct MenuBarStatusLabel: View {
+    @ObservedObject var model: AppModel
+    @ObservedObject var updater: AppUpdater
+
+    var body: some View {
+        HStack(spacing: 4) {
+            MenuBarLogo()
+                .overlay(alignment: .topTrailing) {
+                    if updater.availableVersion != nil {
+                        Circle().fill(.blue).frame(width: 5, height: 5)
+                            .offset(x: 2, y: -1)
+                    }
+                }
+            Text(verbatim: menuBarTitle)
+                .monospacedDigit()
         }
-        .defaultSize(width: 440, height: 540)
-        .windowResizability(.contentMinSize)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(menuBarAccessibilityLabel)
     }
 
-    // MenuBarExtra extracts a single text title from its label. Multiple Text
-    // siblings can drop the percentage after the account name.
+    // MenuBarExtra extracts a single text title from its label.
     private var menuBarTitle: String {
         var parts: [String] = []
         if let name = model.activeAccountName { parts.append(name) }
         if model.settings.showsMenuBarPercentage {
-            parts.append(model.activeFiveHourRemainingPercent.map { "\($0)%" } ?? "—%")
+            parts.append(model.activeRemainingPercent.map { "\($0)%" } ?? "—%")
         }
         return parts.joined(separator: "  ")
     }
@@ -67,11 +54,11 @@ struct SwitcherApp: App {
     private var menuBarAccessibilityLabel: String {
         let updateStatus = updater.availableVersion.map { ", " + model.format("update_available", $0) } ?? ""
         guard model.settings.showsMenuBarPercentage,
-              let remainingPercent = model.activeFiveHourRemainingPercent
+              let remainingPercent = model.activeRemainingPercent
         else {
             return "Codex Account Switcher" + updateStatus
         }
-        return "Codex Account Switcher, \(model.activeAccountName ?? ""), 5-hour remaining \(remainingPercent)%" + updateStatus
+        return "Codex Account Switcher, \(remainingPercent)%" + updateStatus
     }
 }
 
@@ -104,11 +91,11 @@ private struct MenuBarLogo: View {
 }
 
 private struct QuitApplicationCommands: Commands {
-    let title: String
+    @ObservedObject var model: AppModel
 
     var body: some Commands {
         CommandGroup(replacing: .appTermination) {
-            Button(title) {
+            Button(model.text("quit")) {
                 NSApp.terminate(nil)
             }
             .keyboardShortcut("q", modifiers: .command)

@@ -55,10 +55,12 @@ Recommended stack:
 - Swift 6;
 - SwiftUI for UI;
 - `MenuBarExtra` for the status item and popover;
-- AppKit for process discovery and application lifecycle;
+- AppKit for process discovery, application lifecycle and the independently accessible account panel;
 - Service Management for the main app's Login Item registration and authorization state;
 - Foundation `FileManager`, `Process`, and JSON coding;
 - Codex app-server JSON-RPC over stdio for identity and Usage reads.
+
+`SwitcherAppDelegate` owns the shared UI models and starts refresh/update work in `applicationDidFinishLaunching`, even when the menu-bar label is offscreen. Manual launch and `applicationShouldHandleReopen` present `MenuBarPopover` in an `NSPanel` hosted by SwiftUI, with content-derived size constraints. The login-item Apple event suppresses the initial panel. Service Management remains the source of truth for auto-start registration.
 
 No third-party runtime dependency is required beyond the installed Codex executable.
 
@@ -178,7 +180,7 @@ When `showsFiveHourUsage` is absent from an older file, decoding defaults it to 
 
 Launch-at-login state is owned by macOS Service Management and is read from `SMAppService.mainApp.status`. It is never copied into `settings.json`.
 
-`usage-cache.json` stores `profileID`, normalized weekly Usage, optional 5-hour Usage, and `fetchedAt` for each last successful response. The optional fields allow older weekly-only cache entries to decode. No switch phase, rollback reference, or recovery journal is stored.
+`usage-cache.json` stores `profileID`, normalized weekly Usage, optional 5-hour Usage, optional reset count, and `fetchedAt` for each last successful response. The optional fields allow older cache entries to decode. No switch phase, rollback reference, or recovery journal is stored.
 
 ### 6.4 Writes
 
@@ -674,7 +676,7 @@ This is a simple in-process UI invariant, not a cross-process lock service.
 
 Browser sign-in uses `isAddingAccount` and a separately retained task. It does not hold the mutation lock while waiting for the browser callback. Manage Accounts replaces Add Account with a cancel action during this wait; canceling terminates the app-server session and restores the normal button without showing an error.
 
-`MenuBarPopover` owns an in-memory page enum for the account list, Manage Accounts, Settings, and switch confirmation. All secondary pages render inside the same 326-point popover. Cancel and Back change only page state. The root view resets the page to the account list on every popover appearance.
+`MenuBarPopover` owns an in-memory page enum for the account list, Manage Accounts, Settings, and switch confirmation. All secondary pages render inside the same 400-point popover. Cancel and Back change only page state. The root view returns to account management while a sign-in is pending, or to the account list otherwise.
 
 ## 17. Localization
 
