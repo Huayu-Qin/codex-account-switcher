@@ -49,6 +49,13 @@ struct MenuBarPopover: View {
             }
         }
         .frame(width: 326)
+        .fixedSize(horizontal: false, vertical: true)
+        .background { NativeMenuBackground().allowsHitTesting(false) }
+        .background {
+            GeometryReader { geometry in
+                PopoverWindowSizer(contentSize: geometry.size)
+            }
+        }
         .onAppear {
             page = model.isAddingAccount ? .manageAccounts : .accounts
         }

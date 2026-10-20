@@ -183,6 +183,17 @@ public actor AccountStore: AccountStoring {
         try saveRegistry(current)
     }
 
+    public func renameAccount(id: UUID, name: String) throws {
+        let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return }
+        var registry = try loadRegistry()
+        guard let index = registry.accounts.firstIndex(where: { $0.id == id }) else {
+            throw AccountStoreError.profileNotFound
+        }
+        registry.accounts[index].displayName = name
+        try saveRegistry(registry)
+    }
+
     public func discardUnregisteredProfile(id: UUID) throws {
         guard try !loadRegistry().accounts.contains(where: { $0.id == id }) else { return }
         let directory = profileHome(id: id)

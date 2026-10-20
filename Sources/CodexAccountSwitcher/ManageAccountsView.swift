@@ -3,12 +3,15 @@ import SwiftUI
 
 struct ManageAccountsView: View {
     @ObservedObject var model: AppModel
+    var showsHeader = true
     let onBack: () -> Void
 
+    @State private var nameDrafts: [UUID: String] = [:]
     @State private var page: ManageAccountsPage = .accounts
 
     var body: some View {
         VStack(spacing: 0) {
+            if showsHeader {
             PopoverHeader(
                 title: headerTitle,
                 backTitle: model.text("back"),
@@ -16,6 +19,7 @@ struct ManageAccountsView: View {
             )
 
             Divider()
+            }
 
             switch page {
             case .accounts:
@@ -168,6 +172,24 @@ struct ManageAccountsView: View {
         .padding(14)
     }
 
+    private func canSaveName(_ account: AccountProfile) -> Bool {
+        let name = (nameDrafts[account.id] ?? account.displayName)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return !name.isEmpty && name != account.displayName
+    }
+
+    private func saveName(_ account: AccountProfile) {
+        guard canSaveName(account) else { return }
+        let name = nameDrafts[account.id] ?? account.displayName
+        Task {
+            await model.renameAccount(id: account.id, name: name)
+            if model.accounts.first(where: { $0.id == account.id })?.displayName ==
+                name.trimmingCharacters(in: .whitespacesAndNewlines) {
+                nameDrafts[account.id] = nil
+            }
+        }
+    }
+
     private func managedAccountRow(_ account: AccountProfile) -> some View {
         let title = account.email.flatMap { $0.isEmpty ? nil : $0 } ?? account.displayName
         return HStack(spacing: 9) {
@@ -176,11 +198,24 @@ struct ManageAccountsView: View {
                 .frame(width: 28, height: 28)
                 .background(Color.primary.opacity(0.10), in: Circle())
 
-            Text(verbatim: title)
-                .font(.system(size: 12, weight: .medium))
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .help(title)
+            VStack(alignment: .leading, spacing: 5) {
+                Text(verbatim: title)
+                    .font(.system(size: 12, weight: .medium))
+                    .lineLimit(1)
+                    .help(title)
+                HStack {
+                    TextField("Name", text: Binding(
+                        get: { nameDrafts[account.id] ?? account.displayName },
+                        set: { nameDrafts[account.id] = $0 }
+                    ))
+                    .textFieldStyle(.roundedBorder)
+                    .accessibilityLabel("Name for \(title)")
+                    .onSubmit { saveName(account) }
+                    Button("Save") { saveName(account) }
+                        .disabled(!canSaveName(account))
+                }
+                .disabled(model.isMutating || model.isAddingAccount)
+            }
 
             Spacer(minLength: 5)
 

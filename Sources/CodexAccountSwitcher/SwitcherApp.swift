@@ -9,7 +9,7 @@ struct SwitcherApp: App {
 
     var body: some Scene {
         MenuBarExtra {
-            MenuBarPopover(model: model, updater: updater)
+            NativeAccountMenu(model: model, updater: updater)
         } label: {
             HStack(spacing: 4) {
                 MenuBarLogo()
@@ -19,36 +19,59 @@ struct SwitcherApp: App {
                                 .offset(x: 2, y: -1)
                         }
                     }
-                if model.settings.showsMenuBarPercentage,
-                   let remainingPercent = model.activeRemainingPercent {
-                    Text("\(remainingPercent)%")
-                        .monospacedDigit()
-                }
+                Text(verbatim: menuBarTitle)
+                    .monospacedDigit()
+
             }
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel(menuBarAccessibilityLabel)
                 .task {
                     updater.start()
+                    await model.start()
+                    model.refreshWeeklyUsage()
                     await model.startBackgroundUsageRefresh()
                 }
                 .onChange(of: model.isMutating || model.isAddingAccount) { _, busy in
                     updater.accountOperationInProgress = busy
                 }
         }
-        .menuBarExtraStyle(.window)
+        .menuBarExtraStyle(.menu)
         .commands {
             QuitApplicationCommands(title: model.text("quit"))
         }
+
+        Window("Manage Accounts", id: "accounts") {
+            AccountUtilityWindow(model: model, updater: updater, settings: false)
+        }
+        .defaultSize(width: 440, height: 520)
+        .windowResizability(.contentMinSize)
+
+        Window("Settings", id: "settings") {
+            AccountUtilityWindow(model: model, updater: updater, settings: true)
+        }
+        .defaultSize(width: 440, height: 540)
+        .windowResizability(.contentMinSize)
+    }
+
+    // MenuBarExtra extracts a single text title from its label. Multiple Text
+    // siblings can drop the percentage after the account name.
+    private var menuBarTitle: String {
+        var parts: [String] = []
+        if let name = model.activeAccountName { parts.append(name) }
+        if model.settings.showsMenuBarPercentage {
+            parts.append(model.activeFiveHourRemainingPercent.map { "\($0)%" } ?? "—%")
+        }
+        return parts.joined(separator: "  ")
     }
 
     private var menuBarAccessibilityLabel: String {
         let updateStatus = updater.availableVersion.map { ", " + model.format("update_available", $0) } ?? ""
         guard model.settings.showsMenuBarPercentage,
-              let remainingPercent = model.activeRemainingPercent
+              let remainingPercent = model.activeFiveHourRemainingPercent
         else {
             return "Codex Account Switcher" + updateStatus
         }
-        return "Codex Account Switcher, \(remainingPercent)%" + updateStatus
+        return "Codex Account Switcher, \(model.activeAccountName ?? ""), 5-hour remaining \(remainingPercent)%" + updateStatus
     }
 }
 

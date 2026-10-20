@@ -5,6 +5,25 @@ import Testing
 @testable import CodexAccountSwitcher
 
 struct AccountStoreTests {
+    @Test func customNamePersistsWithoutChangingIdentityOrCredentials() async throws {
+        let fixture = try StoreFixture()
+        defer { fixture.remove() }
+        let profiles = try await prepareSwitchProfiles(fixture)
+        let before = try await fixture.store.loadRegistry()
+        let authURL = fixture.activeHome.appending(path: "auth.json")
+        let auth = try Data(contentsOf: authURL)
+        try await fixture.store.renameAccount(id: profiles.target.id, name: "  Work  ")
+        let after = try await fixture.store.loadRegistry()
+        var expected = before
+        let index = try #require(expected.accounts.firstIndex { $0.id == profiles.target.id })
+        expected.accounts[index].displayName = "Work"
+        #expect(after == expected)
+        #expect(try Data(contentsOf: authURL) == auth)
+        try await fixture.store.renameAccount(id: profiles.target.id, name: "   ")
+        #expect(try await fixture.store.loadRegistry() == expected)
+
+    }
+
     @Test(arguments: ["success", "wrong-identity", "commit-failure"])
     func firstActivationHandlesSuccessAndFailure(outcome: String) async throws {
         let fixture = try StoreFixture()

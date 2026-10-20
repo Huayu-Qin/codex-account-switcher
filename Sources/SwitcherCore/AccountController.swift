@@ -50,6 +50,25 @@ open class AccountController {
         return usageStates[activeAccountID]?.displayedUsage?.remainingPercent
     }
 
+    public var activeFiveHourRemainingPercent: Int? {
+        guard let activeAccountID else { return nil }
+        return usageStates[activeAccountID]?.displayedUsage?.fiveHourRemainingPercent
+    }
+
+    public var activeAccountName: String? {
+        accounts.first(where: { $0.id == activeAccountID })?.displayName
+    }
+
+    public func renameAccount(id: UUID, name: String) async {
+        guard !isMutating, !isAddingAccount else { return }
+        isMutating = true
+        defer { isMutating = false }
+        do {
+            try await store.renameAccount(id: id, name: name)
+            apply(try await store.loadRegistry())
+        } catch { showError(error) }
+    }
+
     public func start() async {
         guard !hasStarted else { return }
         hasStarted = true

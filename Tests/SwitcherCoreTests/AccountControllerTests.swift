@@ -4,6 +4,20 @@ import Testing
 
 @MainActor
 struct AccountControllerTests {
+    @Test func menuBarUsesSavedNameAndFiveHourQuota() async throws {
+        let fixture = try ControllerFixture()
+        defer { fixture.clean() }
+        try fixture.writeActiveCredential()
+        await fixture.model.start()
+        let id = try #require(fixture.model.activeAccountID)
+        await fixture.model.renameAccount(id: id, name: " Work ")
+        #expect(fixture.model.activeAccountName == "Work")
+        fixture.model.refreshWeeklyUsage()
+        await fixture.model.waitForWeeklyUsageRefresh()
+        #expect(fixture.model.activeFiveHourRemainingPercent == 23)
+        #expect(fixture.model.activeRemainingPercent == 72)
+    }
+
     @Test func firstActivationInstallsAndCommitsTheSavedAccount() async throws {
         let fixture = try ControllerFixture()
         defer { fixture.clean() }
@@ -165,7 +179,7 @@ private actor FixtureClient: AccountClient {
     }
     func readWeeklyUsage(profileHome: URL) async throws -> WeeklyUsage {
         if usageFails { throw CodexClientError.connectionClosed }
-        return WeeklyUsage(remainingPercent: 72, resetsAt: Date(timeIntervalSince1970: 2_000_000_000))
+        return WeeklyUsage(remainingPercent: 72, resetsAt: Date(timeIntervalSince1970: 2_000_000_000), fiveHourRemainingPercent: 23)
     }
     func login(profileHome: URL) async throws -> AccountIdentity {
         throw CodexClientError.loginFailed("Fixture login is disabled.")

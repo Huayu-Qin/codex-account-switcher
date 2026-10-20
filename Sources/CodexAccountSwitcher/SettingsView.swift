@@ -4,16 +4,19 @@ import SwiftUI
 struct SettingsView: View {
     @ObservedObject var model: AppModel
     @ObservedObject var updater: AppUpdater
+    var showsHeader = true
     let onBack: () -> Void
 
     var body: some View {
         VStack(spacing: 0) {
+            if showsHeader {
             PopoverHeader(
                 title: model.text("settings"),
                 backTitle: model.text("back"),
                 onBack: onBack
             )
             Divider()
+            }
 
             sectionLabel("settings_general")
             settingRow("launch_at_login") {
