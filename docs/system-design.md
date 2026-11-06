@@ -16,7 +16,7 @@ Everything else exists to make that operation understandable and usable:
 - display weekly Usage and optional 5-hour Usage;
 - close and reopen Codex Desktop;
 - save the currently active credential before replacing it;
-- verify that Codex can read the selected identity;
+- verify that the installed credential belongs to the selected account;
 - maintain a small amount of local metadata.
 
 The MVP uses direct sequential code and lets failures surface. One bounded consistency action restores the validated original profile credential when target verification or the registry commit fails after activation. There is no general rollback framework.
@@ -58,9 +58,9 @@ Recommended stack:
 - AppKit for process discovery, application lifecycle and the independently accessible account panel;
 - Service Management for the main app's Login Item registration and authorization state;
 - Foundation `FileManager`, `Process`, and JSON coding;
-- Codex app-server JSON-RPC over stdio for identity and Usage reads.
+- Local credential identity checks during switching; Codex app-server JSON-RPC over stdio for login and Usage reads.
 
-`SwitcherAppDelegate` owns the shared UI models and starts refresh/update work in `applicationDidFinishLaunching`, even when the menu-bar label is offscreen. Manual launch and `applicationShouldHandleReopen` present `MenuBarPopover` in an `NSPanel` hosted by SwiftUI, with content-derived size constraints. The login-item Apple event suppresses the initial panel. Service Management remains the source of truth for auto-start registration.
+`SwitcherAppDelegate` owns the shared UI models and starts refresh/update work in `applicationDidFinishLaunching`, independently of menu-bar visibility. `MenuBarExtra` presents the account interface; there is no separate account panel or reopen-window handler. Forecast requests launched when the popover opens outlive the popover, and a failed request can be attempted again on the next opening. Service Management remains the source of truth for auto-start registration.
 
 No third-party runtime dependency is required beyond the installed Codex executable.
 
@@ -401,11 +401,13 @@ func open() async throws
 
 ### 11.1 Close
 
-Use `NSRunningApplication` for the Codex Desktop bundle identifier and call `terminate()`.
+On macOS, use `NSRunningApplication` for the Codex Desktop bundle identifier and call `terminate()`.
 
-Codex Desktop can display a quit confirmation while work is active. Allow up to 30 seconds for its normal exit, including its history and settings flush. Never force-terminate Desktop. If the quit request is rejected or Desktop remains running, report a close-stage error before saving or replacing credentials. The user can finish or stop active tasks, close Desktop, and switch again. Cancellation also stops the wait.
+On macOS, Codex Desktop can display a quit confirmation while work is active. Allow up to 30 seconds for normal exit, including its history and settings flush; do not force-terminate. If the quit request is rejected or Desktop remains running, report a close-stage error before saving or replacing credentials. The user can finish or stop active tasks, close Desktop, and switch again. Cancellation also stops the wait.
 
-The switcher only observes the Desktop application's exit; it does not terminate CLI processes or claim to repair Codex's history database. Account RPCs read the login shell's `PATH` and shared `CODEX_CLI_PATH` setting. A bare command such as `codex` resolves through that PATH; an explicit absolute path must be executable. The child receives the same PATH so npm launchers can find Node. Without an override or executable PATH command, macOS checks the installed Desktop app layouts described in section 8.
+On Windows, rediscover the Store manifest or executable path for each handoff. Match Desktop by stable application identity or full path, collect descendant process handles from the Windows process snapshot, and terminate the matched trees. Verify both the retained process handles and remaining installation matches before returning, with a 30-second exit timeout. This handles tray-hidden and headless processes without window or keyboard automation. The existing confirmation warns about task interruption and unsaved-state loss. Inspection or termination failures stop before credential changes. Refuse a tree containing the switcher itself.
+
+Account RPCs read the login shell's `PATH` and shared `CODEX_CLI_PATH` setting. A bare command such as `codex` resolves through that PATH; an explicit absolute path must be executable. The child receives the same PATH so npm launchers can find Node. Without an override or executable PATH command, macOS checks the installed Desktop app layouts described in section 8.
 
 If Desktop is not running, `close()` succeeds immediately.
 
@@ -417,7 +419,7 @@ If launch fails, return the AppKit error. The account switch remains at whatever
 
 ### 11.3 CLI processes
 
-The switcher never enumerates, terminates, signals, or restarts `codex` CLI processes.
+The switcher does not terminate or restart independently launched CLI sessions. Windows includes Desktop-owned app-server descendants in its process shutdown, even if their executable is also named `codex.exe`; ancestry, not the executable name alone, determines inclusion.
 
 An existing CLI process may have already loaded credentials into memory. Therefore:
 
@@ -454,47 +456,9 @@ stateDiagram-v2
 
 `RestoringOriginal` is the single bounded consistency action after successful target activation and before a successful registry commit. There is no persisted or general rollback state machine.
 
-### 12.2 Pseudocode
+### 12.2 Implementation
 
-```swift
-func switchAccount(to targetID: UUID) async throws {
-    let target = try store.profile(id: targetID)
-    let registry = try store.loadRegistry()
-    guard let originalActiveID = registry.activeAccountID,
-          registry.accounts.contains(where: { $0.id == originalActiveID }) else {
-        throw AccountStoreError.activeProfileMissing
-    }
-
-    stage = .closeDesktop
-    try await desktop.closeDesktop()
-
-    stage = .saveCurrentCredential
-    try await store.saveCurrentCredential()
-
-    stage = .activateTargetCredential
-    try await store.activateTargetCredential(id: target.id)
-
-    stage = .verifyTargetIdentity
-    do {
-        let identity = try await codex.readIdentity(profileHome: store.activeCodexHome())
-        guard identity.matches(target) else { throw CodexClientError.identityUnavailable }
-    } catch {
-        throw await restoreOriginalCredential(originalActiveID, preserving: error)
-    }
-
-    stage = .commitActiveAccountID
-    do {
-        try await store.commitActiveAccountID(target.id)
-    } catch {
-        throw await restoreOriginalCredential(originalActiveID, preserving: error)
-    }
-
-    stage = .reopenDesktop
-    try await desktop.reopenDesktop()
-}
-```
-
-The restoration helper reuses the saved profile credential and the same atomic installation path. It returns the original stage error after a successful restoration, or one error containing both the original and restoration failures.
+[SwitchService](../Sources/SwitcherCore/SwitchService.swift) owns the switch sequence, including first activation and bounded credential restoration. [CredentialIdentity](../Sources/SwitcherCore/CredentialIdentity.swift) verifies identity from the installed credential.
 
 ### 12.3 Preflight
 
@@ -510,11 +474,11 @@ These checks occur before the six recorded `SwitchStage` values.
 
 ### 12.4 Close Codex Desktop
 
-Closing Desktop comes before saving the active credential so Codex has a chance to finish its normal shutdown writes.
+Closing Desktop comes before saving the active credential, so no matched Desktop process continues using the old credential during replacement. macOS permits normal shutdown writes; Windows force-stops Desktop and its descendants after confirmation.
 
 ### 12.5 Save current credentials
 
-The registry must identify one active account. After Desktop exits, read the shared home’s current identity and match it against this profile before saving. An external login mismatch stops visibly and leaves saved profiles unchanged.
+The registry must identify one active account. After Desktop exits, read the identity from the shared home’s current `auth.json` and match it against this profile before saving. An external login mismatch stops visibly and leaves saved profiles unchanged.
 
 ```text
 copy ~/.codex/auth.json
@@ -537,7 +501,7 @@ If activation fails, stop. Atomic installation throws before a completed replace
 
 ### 12.7 Verify target
 
-Start Codex app-server using the active `~/.codex` home and read identity.
+Read the identity from the installed `~/.codex/auth.json`. Both switch checks use the existing credential parser directly, so account handoff does not depend on app-server's network-backed workspace routing discovery. Missing or malformed credentials fail visibly. Codex authenticates the selected credential with its service after reopening.
 
 If identity does not match the target metadata, preserve the mismatch as the stage error and reinstall the just-saved original profile credential into `~/.codex/auth.json`.
 

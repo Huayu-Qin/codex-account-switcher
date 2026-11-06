@@ -1,11 +1,11 @@
 ## 中文
 
-- 修复重新登录另一个 Codex 账号后仍沿用旧账号标记的问题。macOS 和 Windows 现在以本机当前登录凭证为准，自动选中对应账号并同步其凭证快照，无需手动登记。
-- 新的本机登录账号会自动保存，退出登录后清除当前账号标记。同邮箱的不同工作区保持独立；无法读取的凭证会显示错误。
-- macOS 的账号确认提示和“管理账号”按钮现在显示在同一行。
+- 修复 Windows 版 Codex Desktop 关闭窗口后仍留在托盘、导致账号切换超时的问题。确认切换后，结束对应安装的 Desktop 及其子进程，确认退出后再更换账号凭据并重新打开 Desktop。
+- 保留独立启动的 CLI 和其他路径下的同名程序，并在切换确认中说明任务中断及未保存状态可能丢失。
+- macOS 保持原有正常退出流程。自动使用 reset 的行为保持不变。
 
 ## English
 
-- Fix stale active-account selection after signing in to a different Codex account. Both macOS and Windows now follow the current local credentials, select the matching account, and sync its saved credentials without manual registration.
-- Newly discovered local accounts are saved automatically, and signing out clears the active selection. Workspaces sharing an email remain separate; unreadable credentials produce a visible error.
-- Keep the macOS account-confirmation warning and Manage Accounts button on one line.
+- Fix Windows account-switch timeouts when Codex Desktop remains in the tray after its window closes. After confirmation, terminate the matching Desktop installation and its descendants, verify exit, then replace credentials and reopen Desktop.
+- Preserve independently launched CLI sessions and unrelated same-name executables. The confirmation explains interrupted tasks and possible unsaved-state loss.
+- Keep the macOS normal quit flow and automatic reset behavior unchanged.
