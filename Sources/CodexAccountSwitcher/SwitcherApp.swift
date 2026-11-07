@@ -46,7 +46,11 @@ private struct MenuBarStatusLabel: View {
         var parts: [String] = []
         if let name = model.activeAccountName { parts.append(name) }
         if model.settings.showsMenuBarPercentage {
-            parts.append(model.activeRemainingPercent.map { "\($0)%" } ?? "—%")
+            var usage = model.activeRemainingPercent.map { "\($0)%" } ?? "—%"
+            if model.activeRemainingPercent != nil, let resetsAt = model.activeResetsAt {
+                usage += " · " + resetsAt.compactResetText()
+            }
+            parts.append(usage)
         }
         return parts.joined(separator: "  ")
     }
@@ -58,7 +62,10 @@ private struct MenuBarStatusLabel: View {
         else {
             return "Codex Account Switcher" + updateStatus
         }
-        return "Codex Account Switcher, \(remainingPercent)%" + updateStatus
+        let reset = model.activeResetsAt.map {
+            ", \(model.text("resets")) \($0.formatted(date: .abbreviated, time: .shortened))"
+        } ?? ""
+        return "Codex Account Switcher, \(remainingPercent)%" + reset + updateStatus
     }
 }
 

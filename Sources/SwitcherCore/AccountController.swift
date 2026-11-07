@@ -58,6 +58,16 @@ open class AccountController {
             : usage.remainingPercent
     }
 
+    /// Reset time of the same window that `activeRemainingPercent` reports.
+    public var activeResetsAt: Date? {
+        guard let activeAccountID else { return nil }
+        guard let usage = usageStates[activeAccountID]?.displayedUsage else { return nil }
+        if settings.statusBarUsageWindow == .fiveHour, usage.fiveHourRemainingPercent != nil {
+            return usage.fiveHourResetsAt
+        }
+        return usage.resetsAt
+    }
+
     public var activeFiveHourRemainingPercent: Int? {
         guard let activeAccountID else { return nil }
         return usageStates[activeAccountID]?.displayedUsage?.fiveHourRemainingPercent

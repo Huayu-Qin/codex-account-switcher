@@ -57,10 +57,12 @@ struct NativeAccountMenu: View {
     private func accountTitle(_ account: AccountProfile) -> String {
         var title = account.displayName
         if let usage = model.usageStates[account.id]?.displayedUsage {
+            let weekly = "\(usage.remainingPercent)% (\(usage.resetsAt.compactResetText()))"
             if model.settings.showsFiveHourUsage, let fiveHour = usage.fiveHourRemainingPercent {
-                title += "   ·   5h \(fiveHour)% / 7d \(usage.remainingPercent)%"
+                let fiveHourReset = usage.fiveHourResetsAt.map { " (\($0.compactResetText()))" } ?? ""
+                title += "   ·   5h \(fiveHour)%\(fiveHourReset) / 7d \(weekly)"
             } else {
-                title += "   ·   \(usage.remainingPercent)%"
+                title += "   ·   \(weekly)"
             }
         }
         return title
@@ -108,5 +110,14 @@ struct AccountUtilityWindow: View {
         }
         .frame(minWidth: 400, minHeight: 320)
         .background(Color(nsColor: .windowBackgroundColor))
+    }
+}
+
+extension Date {
+    /// Time only when the reset is within a day; weekday and time otherwise.
+    func compactResetText(now: Date = .now) -> String {
+        timeIntervalSince(now) < 24 * 60 * 60
+            ? formatted(date: .omitted, time: .shortened)
+            : formatted(.dateTime.weekday(.abbreviated).hour().minute())
     }
 }
